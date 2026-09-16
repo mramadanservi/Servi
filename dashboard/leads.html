@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Leads</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Leads</h1>
+      <p class="page-subheading">Totals, filters, who to call next, and every lead on file.</p>
+    </div>
+    <div class="ov-header-actions">
+      <span class="ov-updated-at" id="leadsUpdatedAt"></span>
+      <button type="button" class="ov-refresh-btn" id="leadsRefreshBtn"></button>
+    </div>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-kpi-row cols-4" id="leadsKpiRow">
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+    </div>
+  </section>
+
+  <section class="ov-card leads-filter-card" id="leadsFilterCard" hidden>
+    <div class="ov-card-header">
+      <h2 data-i18n="Filter">Filter</h2>
+      <span class="ov-hint">Applies to the table below — never the vertical totals above</span>
+    </div>
+    <div class="leads-filter-bar">
+      <div class="leads-filter-presets" id="leadsDatePresets">
+        <button type="button" data-preset="all" class="active" data-i18n="All Time">All Time</button>
+        <button type="button" data-preset="yesterday" data-i18n="Yesterday">Yesterday</button>
+        <button type="button" data-preset="today" data-i18n="Today">Today</button>
+        <button type="button" data-preset="week" data-i18n="This Week">This Week</button>
+        <button type="button" data-preset="month" data-i18n="This Month">This Month</button>
+        <button type="button" data-preset="custom" id="leadsCustomRangeBtn" class="drp-trigger-btn" data-i18n="Custom Range">Custom Range</button>
+      </div>
+      <div class="leads-filter-selects">
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="District">District</span>
+          <select id="leadsDistrictSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Area">Area</span>
+          <select id="leadsAreaSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Vertical">Vertical</span>
+          <select id="leadsVerticalSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Gender">Gender</span>
+          <select id="leadsGenderSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Added By">Added By</span>
+          <select id="leadsAddedBySelect"><option value="">All</option></select>
+        </label>
+        <button type="button" class="leads-clear-btn" id="leadsClearFiltersBtn" data-i18n="Clear filters">Clear filters</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card leads-table-card" id="leadsTableCard" hidden>
+        <div class="ov-card-header">
+          <h2>Leads</h2>
+          <span class="ov-hint" id="leadsTableHint"></span>
+        </div>
+        <div class="leads-table-toolbar">
+          <label class="leads-search-wrap">
+            <span id="leadsSearchIcon"></span>
+            <input type="text" id="leadsTableSearch" placeholder="Search name, phone, district, area…" />
+          </label>
+        </div>
+        <div class="leads-table-scroll">
+          <table class="leads-table" id="leadsTable">
+            <thead>
+              <tr>
+                <th data-sort="fullName">Name</th>
+                <th data-sort="mobile">Mobile</th>
+                <th data-sort="vertical">Vertical</th>
+                <th data-sort="district">District</th>
+                <th data-sort="area">Area</th>
+                <th data-sort="status">Status</th>
+                <th data-sort="calledBy">Called By</th>
+                <th data-sort="dateContacted">Date Contacted</th>
+              </tr>
+            </thead>
+            <tbody id="leadsTableBody"></tbody>
+          </table>
+        </div>
+        <div class="leads-table-pagination" id="leadsTablePagination"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card" id="leadsVerticalCard" hidden>
+        <div class="ov-card-header">
+          <h2>All Verticals</h2>
+          <span class="ov-hint">All-time total leads · not affected by filters above · highlighted box is your top vertical</span>
+        </div>
+        <div class="ov-vertical-grid side-vertical-grid" id="leadsVerticalGrid"></div>
+      </section>
+
+      <section class="ov-card ai-chat-card" id="leadsAiCard" hidden>
+        <div class="ov-card-header">
+          <h2>AI Assistant</h2>
+          <span class="ov-hint">Answers from your real numbers</span>
+        </div>
+        <div class="ai-chat-log" id="leadsAiLog"></div>
+        <form class="ai-chat-form" id="leadsAiForm">
+          <input type="text" id="leadsAiInput" placeholder="Ask about your leads…" autocomplete="off" />
+          <button type="submit" aria-label="Send"></button>
+        </form>
+        <div class="ai-chat-suggestions" id="leadsAiSuggestions"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dateRangePicker.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/statusSettings.js"></script>
+<script src="../shared/goals.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/verticalTargets.js"></script>
+<script src="../shared/areaSettings.js"></script>
+<script src="../shared/team.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  function initLeadsPage() {
+    document.getElementById("leadsSearchIcon").innerHTML = Icons.svg("search", { size: 15 });
+    document.querySelector('#leadsAiForm button[type="submit"]').innerHTML = Icons.svg("chevron-right", { size: 17 });
+
+    const refreshBtn = document.getElementById("leadsRefreshBtn");
+    refreshBtn.innerHTML = `${Icons.svg("clock", { size: 15 })}<span>Refresh</span>`;
+    refreshBtn.addEventListener("click", () => loadLeadsData());
+
+    wireFilterBar();
+    wireAiAssistant();
+    wireTable();
+    loadLeadsData();
+  }
+
+  /* ============================================================
+     Data loading
+     ============================================================ */
+
+  async function loadLeadsData() {
+    const kpiRow = document.getElementById("leadsKpiRow");
+    kpiRow.innerHTML = `
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>`;
+    document.getElementById("leadsRefreshBtn").classList.add("spinning");
+
+    try {
+      const { records } = await SheetsClient.fetchAll();
+      DataStore.setRecords(records);
+      document.getElementById("leadsFilterCard").hidden = false;
+      document.getElementById("leadsVerticalCard").hidden = false;
+      document.getElementById("leadsAiCard").hidden = false;
+      document.getElementById("leadsTableCard").hidden = false;
+      populateFilterOptions(records);
+      renderLeadsAll();
+      document.getElementById("leadsUpdatedAt").textContent =
+        "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    } catch (err) {
+      renderLeadsDataError(err);
+    } finally {
+      document.getElementById("leadsRefreshBtn").classList.remove("spinning");
+    }
+  }
+
+  function renderLeadsDataError(err) {
+    console.error("[Leads] Failed to load Sheets data:", err);
+    const needsScope = err.code === "NEEDS_SHEETS_SCOPE";
+    const message = needsScope ? "This dashboard needs permission to read your Google Sheet." : "Couldn't load your recruitment data right now.";
+    const detail = !needsScope && err.message ? `<p class="ov-reconnect-detail">${err.message}</p>` : "";
+    document.getElementById("leadsKpiRow").innerHTML = `
+      <div class="ov-reconnect" style="grid-column: 1 / -1;">
+        <p>${message}</p>
+        ${detail}
+        <button type="button" id="leadsReconnectBtn">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+      </div>`;
+    document.getElementById("leadsFilterCard").hidden = true;
+    document.getElementById("leadsVerticalCard").hidden = true;
+    document.getElementById("leadsAiCard").hidden = true;
+    document.getElementById("leadsTableCard").hidden = true;
+    document.getElementById("leadsReconnectBtn").addEventListener("click", async (e) => {
+      if (!needsScope) {
+        loadLeadsData();
+        return;
+      }
+      e.target.disabled = true;
+      e.target.textContent = "Connecting…";
+      const oldMsg = document.querySelector("#leadsKpiRow .reauth-fail-msg");
+      if (oldMsg) oldMsg.remove();
+      try {
+        await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+        loadLeadsData();
+      } catch (err2) {
+        e.target.disabled = false;
+        e.target.textContent = "Connect Google Sheets";
+        e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${err2.message}</p>`);
+      }
+    });
+  }
+
+  /* ============================================================
+     Filter state + application
+     ------------------------------------------------------------
+     Page-local only — doesn't touch Overview or any other page.
+     The right-side vertical grid deliberately never reads this
+     state (see renderVerticalGridPanel below), per the explicit
+     "total verticals isn't affected by the filter" requirement.
+     ============================================================ */
+
+  const leadsFilters = { preset: "all", district: "", area: "", vertical: "", gender: "", addedBy: "", customStart: null, customEnd: null };
+
+  function datePresetRange(preset) {
+    const { startOfDay, startOfWeek, startOfMonth, addDays, addMonths } = DataStore._dateHelpers;
+    const now = new Date();
+    if (preset === "today") return { start: startOfDay(now), end: addDays(startOfDay(now), 1) };
+    if (preset === "yesterday") {
+      const y = addDays(startOfDay(now), -1);
+      return { start: y, end: addDays(y, 1) };
+    }
+    if (preset === "week") return { start: startOfWeek(now), end: addDays(startOfWeek(now), 7) };
+    if (preset === "month") return { start: startOfMonth(now), end: addMonths(startOfMonth(now), 1) };
+    // "from x to y" — end is exclusive elsewhere in this function, so the
+    // picked end day itself is still included by advancing one extra day.
+    if (preset === "custom" && leadsFilters.customStart && leadsFilters.customEnd) {
+      return { start: leadsFilters.customStart, end: addDays(leadsFilters.customEnd, 1) };
+    }
+    return { start: null, end: null };
+  }
+
+  function getFilteredLeadsRecords() {
+    const all = DataStore.getAllRecords();
+    const { start, end } = datePresetRange(leadsFilters.preset);
+    return all.filter((r) => {
+      if (start && (!r.dateContacted || r.dateContacted < start || r.dateContacted >= end)) return false;
+      if (leadsFilters.district && AreaSettings.canonicalize(r.district) !== leadsFilters.district) return false;
+      if (leadsFilters.area && AreaSettings.canonicalize(r.area) !== leadsFilters.area) return false;
+      if (leadsFilters.vertical && !DataStore.verticalsOf(r).includes(leadsFilters.vertical)) return false;
+      if (leadsFilters.gender && r.gender !== leadsFilters.gender) return false;
+      if (leadsFilters.addedBy && r.addedBy !== leadsFilters.addedBy) return false;
+      return true;
+    });
+  }
+
+  // District/Area options are built from canonicalized (deduped, unified)
+  // labels rather than the raw sheet text — see shared/areaSettings.js for
+  // why (spelling variants like "Bourj hammoud"/"Borj hammoud"/"Bourj
+  // hammoud Beirut" all collapse to one "Bourj Hammoud" entry here).
+  function populateFilterOptions(records) {
+    const districtSelect = document.getElementById("leadsDistrictSelect");
+    const areaSelect = document.getElementById("leadsAreaSelect");
+    const verticalSelect = document.getElementById("leadsVerticalSelect");
+    const genderSelect = document.getElementById("leadsGenderSelect");
+    const addedBySelect = document.getElementById("leadsAddedBySelect");
+
+    const districts = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.district)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const areas = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.area)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const genders = Array.from(new Set(records.map((r) => r.gender).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const addedByNames = Array.from(new Set(records.map((r) => r.addedBy).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
+    districtSelect.innerHTML = `<option value="">All</option>` + districts.map((d) => `<option value="${d}">${d}</option>`).join("");
+    areaSelect.innerHTML = `<option value="">All</option>` + areas.map((a) => `<option value="${a}">${a}</option>`).join("");
+    verticalSelect.innerHTML = `<option value="">All</option>` + DataStore.VERTICALS.map((v) => `<option value="${v.key}">${v.label}</option>`).join("");
+    // No fallback "Male"/"Female" options if the sheet has none — never
+    // invent choices that aren't actually present in the real data.
+    genderSelect.innerHTML = `<option value="">All</option>` + genders.map((g) => `<option value="${g}">${g}</option>`).join("");
+    addedBySelect.innerHTML = `<option value="">All</option>` + addedByNames.map((n) => `<option value="${n}">${n}</option>`).join("");
+  }
+
+  function wireFilterBar() {
+    document.getElementById("leadsDatePresets").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-preset]");
+      if (!btn || btn.dataset.preset === "custom") return; // custom range is handled by DateRangePicker below
+      leadsFilters.preset = btn.dataset.preset;
+      leadsFilters.customStart = null;
+      leadsFilters.customEnd = null;
+      document.querySelectorAll("#leadsDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderLeadsFiltered();
+    });
+    DateRangePicker.attach(document.getElementById("leadsCustomRangeBtn"), {
+      getInitial: () => ({ start: leadsFilters.customStart, end: leadsFilters.customEnd }),
+      onApply: (start, end) => {
+        leadsFilters.preset = "custom";
+        leadsFilters.customStart = start;
+        leadsFilters.customEnd = end;
+        const btn = document.getElementById("leadsCustomRangeBtn");
+        btn.textContent = `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+        document.querySelectorAll("#leadsDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+        renderLeadsFiltered();
+      },
+      onClear: () => {
+        leadsFilters.preset = "all";
+        leadsFilters.customStart = null;
+        leadsFilters.customEnd = null;
+        const btn = document.getElementById("leadsCustomRangeBtn");
+        btn.textContent = "Custom Range";
+        document.querySelectorAll("#leadsDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+        renderLeadsFiltered();
+      },
+    });
+    document.getElementById("leadsDistrictSelect").addEventListener("change", (e) => {
+      leadsFilters.district = e.target.value;
+      renderLeadsFiltered();
+    });
+    document.getElementById("leadsAreaSelect").addEventListener("change", (e) => {
+      leadsFilters.area = e.target.value;
+      renderLeadsFiltered();
+    });
+    document.getElementById("leadsVerticalSelect").addEventListener("change", (e) => {
+      leadsFilters.vertical = e.target.value;
+      renderLeadsFiltered();
+    });
+    document.getElementById("leadsGenderSelect").addEventListener("change", (e) => {
+      leadsFilters.gender = e.target.value;
+      renderLeadsFiltered();
+    });
+    document.getElementById("leadsAddedBySelect").addEventListener("change", (e) => {
+      leadsFilters.addedBy = e.target.value;
+      renderLeadsFiltered();
+    });
+    document.getElementById("leadsClearFiltersBtn").addEventListener("click", () => {
+      leadsFilters.preset = "all";
+      leadsFilters.district = "";
+      leadsFilters.area = "";
+      leadsFilters.vertical = "";
+      leadsFilters.gender = "";
+      leadsFilters.addedBy = "";
+      leadsFilters.customStart = null;
+      leadsFilters.customEnd = null;
+      document.getElementById("leadsCustomRangeBtn").textContent = "Custom Range";
+      document.querySelectorAll("#leadsDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+      document.getElementById("leadsDistrictSelect").value = "";
+      document.getElementById("leadsAreaSelect").value = "";
+      document.getElementById("leadsVerticalSelect").value = "";
+      document.getElementById("leadsGenderSelect").value = "";
+      document.getElementById("leadsAddedBySelect").value = "";
+      renderLeadsFiltered();
+    });
+  }
+
+  /* ============================================================
+     Render orchestration
+     ============================================================ */
+
+  function renderLeadsAll() {
+    renderKpiRow();
+    renderVerticalGridPanel(); // unfiltered — always all-time, all records
+    renderLeadsFiltered(); // everything that DOES respect the filter bar
+  }
+
+  // Everything that responds to the filter bar lives here, so changing a
+  // filter re-renders exactly this set without touching the KPI row (fixed
+  // periods) or the vertical grid (always unfiltered).
+  function renderLeadsFiltered() {
+    const filtered = getFilteredLeadsRecords();
+    renderTable(filtered);
+  }
+
+  /* ---------------- KPI row (fixed periods, never filtered) ---------------- */
+
+  // Same up/down/flat trend-badge pattern already used on Overview's KPI
+  // row (see overview.html's trendBadge), just bigger (".big") and generic
+  // over DataStore.periodOverPeriod's {current, previous, deltaPct,
+  // direction} shape instead of weekOverWeek's — each card compares
+  // against its own natural predecessor period (see renderKpiRow below).
+  function trendBadge(pop, periodLabel) {
+    if (pop.deltaPct === null) {
+      return pop.current > 0
+        ? `<span class="ov-kpi-trend big up">${Icons.svg("trending-up", { size: 14 })}New</span>`
+        : `<span class="ov-kpi-trend big flat">${Icons.svg("minus", { size: 14 })}No activity yet</span>`;
+    }
+    if (pop.direction === "flat") return `<span class="ov-kpi-trend big flat">${Icons.svg("minus", { size: 14 })}Same as ${periodLabel}</span>`;
+    const icon = pop.direction === "up" ? "trending-up" : "trending-down";
+    const sign = pop.direction === "up" ? "+" : "";
+    return `<span class="ov-kpi-trend big ${pop.direction}">${Icons.svg(icon, { size: 14 })}${sign}${pop.deltaPct}% vs ${periodLabel}</span>`;
+  }
+
+  function renderKpiRow() {
+    const all = DataStore.getAllRecords();
+    const { startOfDay, startOfWeek, startOfMonth, addDays } = DataStore._dateHelpers;
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const weekStart = startOfWeek(now);
+    const monthStart = startOfMonth(now);
+    const countSince = (start) => all.filter((r) => r.dateContacted && r.dateContacted >= start).length;
+
+    const cards = [
+      // Total Leads shows just the plain count — no trend arrow (per request:
+      // this is an all-time total, a week-over-week comparison against it
+      // doesn't mean much the way it does for the period-bound cards below).
+      { tone: "leads", icon: "target", value: all.length, label: "Total Leads", sub: "All-time", noArrow: true },
+      { tone: "calls", icon: "calendar", value: countSince(todayStart), label: "Added Today", sub: "New leads today", pop: DataStore.periodOverPeriod(all, () => true, "day"), popLabel: "yesterday" },
+      { tone: "teal", icon: "trending-up", value: countSince(weekStart), label: "Added This Week", sub: "Since Monday", pop: DataStore.periodOverPeriod(all, () => true, "week"), popLabel: "last week" },
+      { tone: "indigo", icon: "bar-chart-2", value: countSince(monthStart), label: "Added This Month", sub: "Since the 1st", pop: DataStore.periodOverPeriod(all, () => true, "month"), popLabel: "last month" },
+    ];
+
+    document.getElementById("leadsKpiRow").innerHTML = cards
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top">
+          <div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div>
+          ${c.noArrow ? "" : trendBadge(c.pop, c.popLabel)}
+        </div>
+        <div class="ov-kpi-value kpi-value-big">${c.value.toLocaleString()}</div>
+        <div class="ov-kpi-label">${I18n.t(c.label)} &middot; ${I18n.t(c.sub)}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- all-time vertical grid ----------------
+     Static — just the lead totals, not clickable, no per-vertical detail
+     breakdown (calls/applied/conversion) shown here; that lives elsewhere
+     (Overview, Applied, Calls). The box with the most total leads gets a
+     highlighted background so the top vertical is visible at a glance. */
+
+  function renderVerticalGridPanel() {
+    const records = DataStore.getAllRecords(); // deliberately unfiltered
+    const stats = DataStore.VERTICALS.map((v) => ({ v, stats: DataStore.verticalStats(records, v.key) }));
+    const topLeads = Math.max(0, ...stats.map((s) => s.stats.totalLeads));
+
+    const grid = document.getElementById("leadsVerticalGrid");
+    grid.innerHTML = stats
+      .map(({ v, stats: s }) => {
+        const isTop = topLeads > 0 && s.totalLeads === topLeads;
+        return `
+        <div class="ov-vertical-box${isTop ? " top-vertical" : ""}" title="${v.label}">
+          <div class="ov-vertical-box-head">
+            <span class="ov-vertical-box-icon">${Icons.svg(v.icon, { size: 14 })}</span>
+            <span class="ov-vertical-box-label">${v.label}</span>
+          </div>
+          <div class="ov-vertical-box-count">${s.totalLeads}</div>
+          <div class="ov-vertical-box-count-label">total leads</div>
+        </div>`;
+      })
+      .join("");
+  }
+
+  // Kept for the AI Assistant's follow-up backlog answer below — the actual
+  // "Recommended Calls" panel that used to live on this page moved to Calls.
+  const URGENT_DAYS = 7;
+
+  function daysSince(date) {
+    if (!date) return null;
+    return Math.floor((Date.now() - date.getTime()) / 86400000);
+  }
+
+  /* ---------------- verticals needing focus ----------------
+     Ported from v1's js/recommendations.js verticalStats()/verticalReason(),
+     using the newly-ported VerticalTargets module for manual weekly targets
+     where set, falling back to the automatic team average otherwise.
+
+     Originally this always compared a fixed "this week" window regardless
+     of the page's filters — now it works directly off whatever `records`
+     the filter bar hands it (date preset + district + area), so picking
+     "This Month" or a specific district actually changes what shows up
+     here instead of silently being ignored. */
+
+  function verticalFocusStats(records) {
+    const raw = DataStore.VERTICALS.map((v) => {
+      const recs = records.filter((r) => DataStore.verticalsOf(r).includes(v.key));
+      const applied = recs.filter((r) => StatusSettings.classify(r.status) === "applied").length;
+      const calls = recs.filter((r) => !!r.calledBy).length;
+      const backlog = recs.filter((r) => StatusSettings.classify(r.status) === "followUp").length;
+      return { key: v.key, label: v.label, icon: v.icon, applied, calls, backlog, totalLeads: recs.length };
+    });
+
+    const autoBasis = raw.filter((v) => VerticalTargets.get(v.key) === null);
+    const avgApplied = autoBasis.length ? autoBasis.reduce((s, v) => s + v.applied, 0) / autoBasis.length : 0;
+
+    return raw.map((v) => {
+      const manualTarget = VerticalTargets.get(v.key);
+      const basis = manualTarget !== null ? manualTarget : Math.round(avgApplied * 10) / 10;
+      let ratio = null;
+      if (basis > 0) ratio = v.applied / basis;
+      else if (v.applied > 0) ratio = 1;
+      let tone = "slate";
+      if (ratio !== null) {
+        if (ratio < 0.7) tone = "red";
+        else if (ratio < 1) tone = "amber";
+        else tone = "green";
+      }
+      return { ...v, manualTarget, basis, ratio, tone };
+    });
+  }
+
+  function verticalFocusReason(v) {
+    if (v.manualTarget !== null) return `${v.applied} of ${v.manualTarget} applications in this filter (your target).`;
+    if (v.basis > 0) return `${v.applied} application${v.applied === 1 ? "" : "s"} vs. a ${v.basis} team average.`;
+    return "Not enough activity yet in this filter to compare.";
+  }
+
+  /* ============================================================
+     AI Assistant — rule-based Q&A over the real dashboard numbers.
+     ------------------------------------------------------------
+     HONEST NOTE: v1's actual codebase (checked directly) never shipped a
+     working AI Assistant — only a placeholder page referenced one. So
+     this isn't a port of existing logic; it's a new widget, built to
+     match the same house style already used for Overview's "AI Insights"
+     card: plain-language answers computed from real numbers, no external
+     AI/LLM call and no invented data. If you want a true LLM-backed
+     assistant later, that's a separate feature (needs a real API key and
+     a backend call) — ask and we can scope it.
+     ============================================================ */
+
+  const AI_SUGGESTIONS = [
+    "How many leads this week?",
+    "Which vertical needs focus?",
+    "Follow-up backlog?",
+    "Top caller?",
+    "Conversion rate?",
+  ];
+
+  function aiAnswer(question) {
+    const records = DataStore.getAllRecords();
+    const kpis = DataStore.kpis(records);
+    const q = question.toLowerCase();
+
+    if (/backlog|follow.?up/.test(q)) {
+      const backlog = records.filter((r) => StatusSettings.classify(r.status) === "followUp").length;
+      const urgent = records.filter((r) => {
+        if (StatusSettings.classify(r.status) !== "followUp" || !r.dateContacted) return false;
+        return daysSince(r.dateContacted) >= URGENT_DAYS;
+      }).length;
+      return `There ${backlog === 1 ? "is" : "are"} <strong>${backlog}</strong> lead${backlog === 1 ? "" : "s"} waiting on a follow-up call, ${urgent} of them overdue (7+ days).`;
+    }
+    if (/which vertical|need.*focus|underperform/.test(q)) {
+      const stats = verticalFocusStats(records).filter((v) => v.tone === "red" || v.tone === "amber");
+      if (!stats.length) return "Every vertical is on track this week — nothing needs urgent focus.";
+      stats.sort((a, b) => (a.ratio ?? 0) - (b.ratio ?? 0));
+      return `<strong>${stats[0].label}</strong> needs the most attention this week — ${verticalFocusReason(stats[0])}`;
+    }
+    if (/top caller|best caller|who.*most calls|top performer/.test(q)) {
+      const callers = Team.getCallers(records).map((name) => ({ name, m: Team.metricsFor(records, name) }));
+      if (!callers.length) return "No calls logged yet — nothing to rank.";
+      callers.sort((a, b) => b.m.callsMade - a.m.callsMade);
+      const top = callers[0];
+      return `<strong>${top.name}</strong> has made the most calls (${top.m.callsMade}), with a ${top.m.connectRate ?? 0}% connect rate.`;
+    }
+    if (/conversion/.test(q)) {
+      return `Overall conversion rate is <strong>${kpis.conversionRate}%</strong> (${kpis.applied} applied out of ${kpis.totalLeads} leads).`;
+    }
+    if (/connect rate/.test(q)) {
+      return `Overall call connect rate is <strong>${kpis.callConnectRate}%</strong> (${kpis.totalCalled} of ${kpis.totalLeads} leads called).`;
+    }
+    if (/today/.test(q) && /lead/.test(q)) {
+      return `<strong>${DataStore.kpis(records).callsToday ?? 0}</strong> calls were made today. Use the "Added Today" card above for new leads today.`;
+    }
+    if (/this week/.test(q) && /lead/.test(q)) {
+      const { startOfWeek } = DataStore._dateHelpers;
+      const start = startOfWeek(new Date());
+      const count = records.filter((r) => r.dateContacted && r.dateContacted >= start).length;
+      return `<strong>${count}</strong> leads have been added this week so far.`;
+    }
+    if (/this month/.test(q) && /lead/.test(q)) {
+      const { startOfMonth } = DataStore._dateHelpers;
+      const start = startOfMonth(new Date());
+      const count = records.filter((r) => r.dateContacted && r.dateContacted >= start).length;
+      return `<strong>${count}</strong> leads have been added this month so far.`;
+    }
+    if (/how many lead|total lead/.test(q)) {
+      return `There are <strong>${kpis.totalLeads}</strong> leads on file in total.`;
+    }
+    return `I can answer questions about totals, conversion/connect rates, the follow-up backlog, which vertical needs focus, and top callers — try one of the suggestions below.`;
+  }
+
+  function appendAiMessage(text, from) {
+    const log = document.getElementById("leadsAiLog");
+    log.insertAdjacentHTML("beforeend", `<div class="ai-chat-msg from-${from}">${text}</div>`);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function wireAiAssistant() {
+    appendAiMessage("Ask me about your leads — totals, conversion, follow-ups, verticals needing focus, or top callers.", "ai");
+    document.getElementById("leadsAiSuggestions").innerHTML = AI_SUGGESTIONS.map((s) => `<button type="button" class="ai-chat-chip">${s}</button>`).join("");
+
+    const form = document.getElementById("leadsAiForm");
+    const input = document.getElementById("leadsAiInput");
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (!q) return;
+      appendAiMessage(q, "user");
+      input.value = "";
+      setTimeout(() => appendAiMessage(aiAnswer(q), "ai"), 150);
+    });
+
+    document.getElementById("leadsAiSuggestions").addEventListener("click", (e) => {
+      const chip = e.target.closest(".ai-chat-chip");
+      if (!chip) return;
+      appendAiMessage(chip.textContent, "user");
+      setTimeout(() => appendAiMessage(aiAnswer(chip.textContent), "ai"), 150);
+    });
+  }
+
+  /* ============================================================
+     Leads table — searchable + sortable + paginated, respects filters.
+     ============================================================ */
+
+  const tableState = { sortKey: "dateContacted", sortDir: "desc", search: "", page: 1, pageSize: 25, records: [] };
+
+  function wireTable() {
+    document.getElementById("leadsTableSearch").addEventListener("input", (e) => {
+      tableState.search = e.target.value.trim().toLowerCase();
+      tableState.page = 1;
+      renderTableBody();
+    });
+    document.getElementById("leadsTable").querySelector("thead").addEventListener("click", (e) => {
+      const th = e.target.closest("th[data-sort]");
+      if (!th) return;
+      const key = th.dataset.sort;
+      if (tableState.sortKey === key) {
+        tableState.sortDir = tableState.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        tableState.sortKey = key;
+        tableState.sortDir = "asc";
+      }
+      renderTableBody();
+    });
+  }
+
+  function renderTable(records) {
+    tableState.records = records;
+    tableState.page = 1;
+    renderTableBody();
+  }
+
+  function tableSortValue(r, key) {
+    if (key === "vertical") return DataStore.verticalsOf(r).join(", ");
+    if (key === "dateContacted") return r.dateContacted ? r.dateContacted.getTime() : -Infinity;
+    return (r[key] || "").toString().toLowerCase();
+  }
+
+  function renderTableBody() {
+    const { search, sortKey, sortDir, pageSize } = tableState;
+    let rows = tableState.records;
+
+    if (search) {
+      rows = rows.filter((r) =>
+        [r.fullName, r.mobile, r.district, r.area, r.vertical, r.status, r.calledBy].join(" ").toLowerCase().includes(search)
+      );
+    }
+
+    rows = rows.slice().sort((a, b) => {
+      const av = tableSortValue(a, sortKey);
+      const bv = tableSortValue(b, sortKey);
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    tableState.page = Math.min(tableState.page, totalPages);
+    const start = (tableState.page - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
+
+    document.getElementById("leadsTableHint").textContent = `${rows.length.toLocaleString()} lead${rows.length === 1 ? "" : "s"} matching current filters`;
+
+    document.querySelectorAll("#leadsTable th[data-sort]").forEach((th) => {
+      const arrow = th.querySelector(".sort-arrow");
+      if (arrow) arrow.remove();
+      if (th.dataset.sort === sortKey) {
+        th.insertAdjacentHTML("beforeend", `<span class="sort-arrow">${sortDir === "asc" ? "↑" : "↓"}</span>`);
+      }
+    });
+
+    document.getElementById("leadsTableBody").innerHTML = pageRows
+      .map((r) => {
+        const bucket = StatusSettings.classify(r.status);
+        return `
+        <tr>
+          <td>${r.fullName}</td>
+          <td>${r.mobile || "—"}</td>
+          <td>${DataStore.verticalsOf(r).map((v) => DataStore.verticalLabel(v)).join(", ") || "—"}</td>
+          <td>${AreaSettings.canonicalize(r.district) || "—"}</td>
+          <td>${AreaSettings.canonicalize(r.area) || "—"}</td>
+          <td><span class="leads-table-status-pill ${bucket}">${r.status || "—"}</span></td>
+          <td>${r.calledBy || "—"}</td>
+          <td>${r.dateContacted ? r.dateContacted.toLocaleDateString() : "—"}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const pag = document.getElementById("leadsTablePagination");
+    if (totalPages <= 1) {
+      pag.innerHTML = "";
+    } else {
+      pag.innerHTML = `
+        <button type="button" id="leadsTablePrev" ${tableState.page <= 1 ? "disabled" : ""}>Prev</button>
+        <span>Page ${tableState.page} of ${totalPages}</span>
+        <button type="button" id="leadsTableNext" ${tableState.page >= totalPages ? "disabled" : ""}>Next</button>`;
+      document.getElementById("leadsTablePrev")?.addEventListener("click", () => {
+        tableState.page--;
+        renderTableBody();
+      });
+      document.getElementById("leadsTableNext")?.addEventListener("click", () => {
+        tableState.page++;
+        renderTableBody();
+      });
+    }
+  }
+
+  /* ============================================================
+     Bootstrap — runs last, after every function/const above it has
+     been defined, since initLeadsPage() (triggered here) reaches for
+     several of them right away (same pattern as overview.html).
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Leads] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "leads", root: ".." });
+    initLeadsPage();
+  }
+</script>
+
+</body>
+</html>

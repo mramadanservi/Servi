@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Create New Chatroom</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <h1 class="page-heading">Create New Chatroom</h1>
+  <p class="page-subheading">Start a private conversation with a teammate.</p>
+  <div class="placeholder-card">
+    <div class="placeholder-card-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" /> <path d="M12 8v6" /> <path d="M9 11h6" /></svg></div>
+    <h2>Coming in a later phase</h2>
+    <p>Enter a teammate's email to start a private chat — exact technical implementation to be discussed before this is built.</p>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    AppShell.init({ current: "new-chat", root: ".." });
+  }
+</script>
+
+</body>
+</html>

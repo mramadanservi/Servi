@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Calendar</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <h1 class="page-heading">Calendar</h1>
+  <p class="page-subheading">Your own Google Calendar, in the same place as the rest of your day.</p>
+
+  <div class="cal-page-layout" id="calLayout">
+    <div class="cal-grid-card">
+      <div class="cal-grid-header">
+        <div class="cal-grid-title" id="calMonthLabel">&nbsp;</div>
+        <div class="cal-grid-nav">
+          <button type="button" class="cal-nav-btn" id="calPrevBtn" aria-label="Previous month"></button>
+          <button type="button" class="cal-today-btn" id="calTodayBtn">Today</button>
+          <button type="button" class="cal-nav-btn" id="calNextBtn" aria-label="Next month"></button>
+        </div>
+      </div>
+      <div class="cal-weekday-row" id="calWeekdayRow"></div>
+      <div class="cal-day-grid" id="calDayGrid"></div>
+    </div>
+
+    <div class="cal-agenda-card">
+      <div class="cal-agenda-title" id="calAgendaTitle">Today</div>
+      <div class="cal-agenda-list" id="calAgendaList"></div>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Calendar] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "calendar", root: ".." });
+    initCalendarPage();
+  }
+
+  function initCalendarPage() {
+    const monthLabel = document.getElementById("calMonthLabel");
+    const weekdayRow = document.getElementById("calWeekdayRow");
+    const dayGrid = document.getElementById("calDayGrid");
+    const agendaTitle = document.getElementById("calAgendaTitle");
+    const agendaList = document.getElementById("calAgendaList");
+    const prevBtn = document.getElementById("calPrevBtn");
+    const nextBtn = document.getElementById("calNextBtn");
+    const todayBtn = document.getElementById("calTodayBtn");
+
+    prevBtn.innerHTML = Icons.svg("chevron-left", { size: 16 });
+    nextBtn.innerHTML = Icons.svg("chevron-right", { size: 16 });
+
+    const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    weekdayRow.innerHTML = WEEKDAYS.map((d) => `<div class="cal-weekday">${d}</div>`).join("");
+
+    const MONTH_NAMES = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December",
+    ];
+
+    const today = new Date();
+    let viewYear = today.getFullYear();
+    let viewMonth = today.getMonth(); // 0-11
+    let selected = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    let eventsByDay = new Map(); // "Y-M-D" -> events[]
+
+    function ymd(d) {
+      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    }
+
+    function sameDay(a, b) {
+      return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+
+    // Monday-start grid spanning the full weeks that cover this month.
+    function gridBounds(year, month) {
+      const first = new Date(year, month, 1);
+      const startOffset = (first.getDay() + 6) % 7; // Mon=0 ... Sun=6
+      const gridStart = new Date(year, month, 1 - startOffset);
+      const gridEnd = new Date(gridStart);
+      gridEnd.setDate(gridStart.getDate() + 42); // 6 full weeks, exclusive end
+      return { gridStart, gridEnd };
+    }
+
+    function renderGrid() {
+      monthLabel.textContent = `${MONTH_NAMES[viewMonth]} ${viewYear}`;
+      const { gridStart } = gridBounds(viewYear, viewMonth);
+      const cells = [];
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(gridStart);
+        d.setDate(gridStart.getDate() + i);
+        const inMonth = d.getMonth() === viewMonth;
+        const isToday = sameDay(d, today);
+        const isSelected = sameDay(d, selected);
+        const dayEvents = eventsByDay.get(ymd(d)) || [];
+        const dots = dayEvents.slice(0, 3).map(() => `<span class="cal-day-dot"></span>`).join("");
+        const more = dayEvents.length > 3 ? `<span class="cal-day-more">+${dayEvents.length - 3}</span>` : "";
+        cells.push(`
+          <button type="button" class="cal-day-cell${inMonth ? "" : " other-month"}${isToday ? " is-today" : ""}${isSelected ? " selected" : ""}" data-date="${d.toISOString()}">
+            <span class="cal-day-num">${d.getDate()}</span>
+            <span class="cal-day-dots">${dots}${more}</span>
+          </button>
+        `);
+      }
+      dayGrid.innerHTML = cells.join("");
+      dayGrid.querySelectorAll(".cal-day-cell").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          selected = new Date(btn.dataset.date);
+          renderGrid();
+          renderAgenda();
+        });
+      });
+    }
+
+    function formatTime(d) {
+      return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+
+    function renderAgenda() {
+      const isToday = sameDay(selected, today);
+      agendaTitle.textContent = isToday
+        ? "Today"
+        : selected.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+      const dayEvents = (eventsByDay.get(ymd(selected)) || []).slice().sort((a, b) => a.start - b.start);
+      if (dayEvents.length === 0) {
+        agendaList.innerHTML = `<div class="cal-agenda-empty">No events on this day.</div>`;
+        return;
+      }
+      agendaList.innerHTML = dayEvents
+        .map(
+          (ev) => `
+        <div class="cal-agenda-item">
+          <div class="cal-agenda-time">${ev.allDay ? "All day" : formatTime(ev.start)}</div>
+          <div class="cal-agenda-event-title">${ev.title}</div>
+          ${ev.location ? `<div class="cal-agenda-location">${ev.location}</div>` : ""}
+        </div>
+      `
+        )
+        .join("");
+    }
+
+    function renderReconnect(message) {
+      dayGrid.innerHTML = "";
+      weekdayRow.innerHTML = "";
+      monthLabel.textContent = "Calendar";
+      document.querySelector(".cal-grid-card").insertAdjacentHTML(
+        "beforeend",
+        `<div class="cal-page-error">
+           <p>${message}</p>
+           <button type="button" id="calReconnectBtn">Connect Google Calendar</button>
+         </div>`
+      );
+      document.getElementById("calReconnectBtn").addEventListener("click", async (e) => {
+        e.target.disabled = true;
+        e.target.textContent = "Connecting…";
+        const oldMsg = document.querySelector(".cal-page-error .reauth-fail-msg");
+        if (oldMsg) oldMsg.remove();
+        try {
+          await Auth.reauthorize(CalendarAPI.CALENDAR_SCOPE);
+          window.location.reload();
+        } catch (err) {
+          e.target.disabled = false;
+          e.target.textContent = "Connect Google Calendar";
+          e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${err.message}</p>`);
+        }
+      });
+      agendaList.innerHTML = `<div class="cal-agenda-empty">Connect your calendar to see events here.</div>`;
+    }
+
+    async function loadMonth() {
+      const { gridStart, gridEnd } = gridBounds(viewYear, viewMonth);
+      try {
+        const events = await CalendarAPI.listEvents({ timeMin: gridStart, timeMax: gridEnd, maxResults: 250 });
+        eventsByDay = new Map();
+        events.forEach((ev) => {
+          const key = ymd(ev.start);
+          if (!eventsByDay.has(key)) eventsByDay.set(key, []);
+          eventsByDay.get(key).push(ev);
+        });
+        renderGrid();
+        renderAgenda();
+      } catch (err) {
+        if (err.code === "NEEDS_CALENDAR_SCOPE") {
+          renderReconnect("This dashboard needs permission to read your Google Calendar.");
+        } else {
+          renderReconnect("Couldn't load your calendar. Try reconnecting your account.");
+        }
+      }
+    }
+
+    prevBtn.addEventListener("click", () => {
+      viewMonth -= 1;
+      if (viewMonth < 0) { viewMonth = 11; viewYear -= 1; }
+      loadMonth();
+    });
+    nextBtn.addEventListener("click", () => {
+      viewMonth += 1;
+      if (viewMonth > 11) { viewMonth = 0; viewYear += 1; }
+      loadMonth();
+    });
+    todayBtn.addEventListener("click", () => {
+      viewYear = today.getFullYear();
+      viewMonth = today.getMonth();
+      selected = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      loadMonth();
+    });
+
+    renderGrid();
+    renderAgenda();
+    loadMonth();
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Map</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Map</h1>
+      <p class="page-subheading">Where your applicants are across Lebanon, district by district.</p>
+    </div>
+    <div class="ov-header-actions">
+      <span class="ov-updated-at" id="mapUpdatedAt"></span>
+      <button type="button" class="ov-refresh-btn" id="mapRefreshBtn"></button>
+    </div>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-kpi-row" id="mapKpiRow">
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+    </div>
+  </section>
+
+  <section class="ov-card leads-filter-card" id="mapFilterCard" hidden>
+    <div class="ov-card-header">
+      <h2 data-i18n="Filter">Filter</h2>
+      <span class="ov-hint">Applies to the KPI row above, the map, and the verticals panel below</span>
+    </div>
+    <div class="leads-filter-bar">
+      <div class="leads-filter-presets" id="mapDatePresets">
+        <button type="button" data-preset="all" class="active" data-i18n="All Time">All Time</button>
+        <button type="button" data-preset="today" data-i18n="Today">Today</button>
+        <button type="button" data-preset="yesterday" data-i18n="Yesterday">Yesterday</button>
+        <button type="button" data-preset="week" data-i18n="This Week">This Week</button>
+        <button type="button" data-preset="month" data-i18n="This Month">This Month</button>
+      </div>
+      <div class="leads-filter-selects">
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Vertical">Vertical</span>
+          <select id="mapVerticalSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Gender">Gender</span>
+          <select id="mapGenderSelect"><option value="">All</option></select>
+        </label>
+        <button type="button" class="leads-clear-btn" id="mapClearFiltersBtn" data-i18n="Clear filters">Clear filters</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card" id="mapCanvasCard" hidden>
+        <div class="ov-card-header">
+          <h2>Explore by District</h2>
+          <span class="ov-hint" id="mapFilteredCount"></span>
+        </div>
+        <div class="map-legend">
+          <span>Fewer applicants</span>
+          <span class="map-legend-swatch"></span>
+          <span>More applicants</span>
+        </div>
+        <div id="mapCanvas"></div>
+      </section>
+
+      <section class="ov-card" id="mapDetailCard" hidden>
+        <div id="mapDetailPanel"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card" id="mapVerticalCard" hidden>
+        <div class="ov-card-header">
+          <h2>Top District per Vertical</h2>
+          <span class="ov-hint">Where each vertical's applicants are concentrated, under the filters above</span>
+        </div>
+        <div class="map-vertical-grid" id="mapVerticalGrid"></div>
+      </section>
+
+      <section class="ov-card" id="mapInsightsCard" hidden>
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="mapInsights"></div>
+      </section>
+
+      <section class="ov-card ai-chat-card" id="mapAiCard" hidden>
+        <div class="ov-card-header">
+          <h2>AI Assistant</h2>
+          <span class="ov-hint">Answers from your real numbers</span>
+        </div>
+        <div class="ai-chat-log" id="mapAiLog"></div>
+        <form class="ai-chat-form" id="mapAiForm">
+          <input type="text" id="mapAiInput" placeholder="Ask about the map…" autocomplete="off" />
+          <button type="submit" aria-label="Send"></button>
+        </form>
+        <div class="ai-chat-suggestions" id="mapAiSuggestions"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div class="lm-tooltip" id="mapTooltip" hidden></div>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/areaSettings.js"></script>
+<script src="../shared/legacyApplied.js"></script>
+<script src="../shared/lebanonGeo.js"></script>
+<script src="../shared/mapRenderer.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     Map page
+     ------------------------------------------------------------
+     Reads the same "From Fillout" Applied sheet as applied.html
+     (same SheetsClient.fetchApplied() + LEGACY_APPLIED merge — see
+     applied.html's header comment for why that merge exists), then
+     visualizes it on the real Lebanon district geography ported
+     from the older, fully-built servi-unified-dashboard/map/ module
+     (shared/lebanonGeo.js + shared/mapRenderer.js — same interaction
+     model: hover to preview a district's count, click to zoom in
+     with an animation and show its area breakdown below the map).
+
+     Like applied.html, this keeps its own page-local `mapRecords`
+     array rather than reusing DataStore.setRecords()/getAllRecords()
+     — an Applied record isn't shaped like a Leads/Calls record. What
+     IS reused directly: DataStore.VERTICALS/verticalsOf/verticalLabel/
+     _dateHelpers, and AreaSettings.canonicalize (schema-agnostic).
+
+     Three judgment calls worth flagging (none of these were spelled
+     out precisely in the request):
+       - The 2nd KPI card is "Lowest District" — the district (among
+         those with at least 1 applicant in the current filter) with
+         the FEWEST applicants, mirroring "Top District" (the one
+         with the most). This was originally built as a "Weakest
+         Vertical" card; the user corrected that ("I want the
+         district with the lowest [count], not the lowest vertical")
+         so it's now district-vs-district like its neighbor, not
+         vertical-vs-vertical. The separate "weakest vertical" idea
+         still lives on in the AI Insights panel and mini-assistant
+         below, as a genuinely different, still-useful metric.
+       - "Coverage Rate" = the % of Lebanon's 26 real districts (per
+         shared/lebanonGeo.js) that have at least 1 applicant in the
+         current filter — there's no separate freelancer-supply
+         dataset to compute a demand/supply-style coverage number
+         against, so this is geographic reach, not a ratio to demand.
+       - All three header metrics AND the "Top District per Vertical"
+         panel use the exact same filtered record set (date preset +
+         Vertical + Gender) — including the Vertical filter itself.
+         So picking one vertical in the filter necessarily makes every
+         other vertical's box in that panel read 0/"—"; this was kept
+         simple and literal ("still under filters") rather than
+         special-cased, but is easy to change if you'd rather the
+         panel always show all 9 regardless of the Vertical filter.
+     ============================================================ */
+
+  let mapRecords = [];
+  const CARD_IDS = ["mapFilterCard", "mapCanvasCard", "mapDetailCard", "mapVerticalCard", "mapInsightsCard", "mapAiCard"];
+
+  const mapState = { preset: "all", vertical: "", gender: "", zoomedDistrictId: null };
+
+  function withLegacyApplied(liveRecords) {
+    const legacy = (typeof LEGACY_APPLIED !== "undefined" ? LEGACY_APPLIED : []).map((r) => ({
+      ...r,
+      dob: r.dob ? new Date(r.dob) : null,
+      submittedAt: r.submittedAt ? new Date(r.submittedAt) : null,
+    }));
+    return [...liveRecords, ...legacy];
+  }
+
+  function initMapPage() {
+    const refreshBtn = document.getElementById("mapRefreshBtn");
+    refreshBtn.innerHTML = `${Icons.svg("clock", { size: 15 })}<span>Refresh</span>`;
+    refreshBtn.addEventListener("click", () => loadMapData());
+
+    LebanonMap.render(document.getElementById("mapCanvas"));
+    LebanonMap.setCounts({});
+    renderEmptyDetailPanel();
+    wireFilterBar();
+    wireAiAssistant();
+
+    LebanonMap.onHover((district, isHovering) => {
+      const count = getFilteredMapRecords().filter((r) => AreaSettings.canonicalize(r.district) === district.name).length;
+      renderTooltip(district, count, isHovering);
+    });
+    LebanonMap.onClick((district) => {
+      mapState.zoomedDistrictId = district.id;
+      LebanonMap.zoomTo(district.id);
+      renderTooltip(null, 0, false);
+      renderDistrictPanel(district, getFilteredMapRecords());
+    });
+    document.addEventListener("mousemove", (e) => {
+      const tip = document.getElementById("mapTooltip");
+      if (tip && !tip.hidden) {
+        tip.style.left = `${e.clientX + 16}px`;
+        tip.style.top = `${e.clientY + 16}px`;
+      }
+    });
+
+    loadMapData();
+  }
+
+  async function loadMapData() {
+    document.getElementById("mapKpiRow").innerHTML = `
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>`;
+    document.getElementById("mapRefreshBtn").classList.add("spinning");
+
+    try {
+      const { records } = await SheetsClient.fetchApplied();
+      mapRecords = withLegacyApplied(records);
+      CARD_IDS.forEach((id) => (document.getElementById(id).hidden = false));
+      populateFilterOptions(mapRecords);
+      renderAll();
+      document.getElementById("mapUpdatedAt").textContent =
+        "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    } catch (err) {
+      renderMapDataError(err);
+    } finally {
+      document.getElementById("mapRefreshBtn").classList.remove("spinning");
+    }
+  }
+
+  function renderMapDataError(err) {
+    console.error("[Map] Failed to load Sheets data:", err);
+    const needsScope = err.code === "NEEDS_SHEETS_SCOPE";
+    const message = needsScope ? "This dashboard needs permission to read your Google Sheet." : "Couldn't load your applications data right now.";
+    const detail = !needsScope && err.message ? `<p class="ov-reconnect-detail">${err.message}</p>` : "";
+    document.getElementById("mapKpiRow").innerHTML = `
+      <div class="ov-reconnect" style="grid-column: 1 / -1;">
+        <p>${message}</p>
+        ${detail}
+        <button type="button" id="mapReconnectBtn">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+      </div>`;
+    CARD_IDS.forEach((id) => (document.getElementById(id).hidden = true));
+    document.getElementById("mapReconnectBtn").addEventListener("click", async (e) => {
+      if (!needsScope) {
+        loadMapData();
+        return;
+      }
+      e.target.disabled = true;
+      e.target.textContent = "Connecting…";
+      const oldMsg = document.querySelector("#mapKpiRow .reauth-fail-msg");
+      if (oldMsg) oldMsg.remove();
+      try {
+        await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+        loadMapData();
+      } catch (err2) {
+        e.target.disabled = false;
+        e.target.textContent = "Connect Google Sheets";
+        e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${err2.message}</p>`);
+      }
+    });
+  }
+
+  /* ============================================================
+     Filter state
+     ============================================================ */
+
+  function datePresetRange(preset) {
+    const { startOfDay, startOfWeek, startOfMonth, addDays, addMonths } = DataStore._dateHelpers;
+    const now = new Date();
+    if (preset === "today") return { start: startOfDay(now), end: addDays(startOfDay(now), 1) };
+    if (preset === "yesterday") {
+      const y = addDays(startOfDay(now), -1);
+      return { start: y, end: addDays(y, 1) };
+    }
+    if (preset === "week") return { start: startOfWeek(now), end: addDays(startOfWeek(now), 7) };
+    if (preset === "month") return { start: startOfMonth(now), end: addMonths(startOfMonth(now), 1) };
+    return { start: null, end: null };
+  }
+
+  function getFilteredMapRecords() {
+    const { start, end } = datePresetRange(mapState.preset);
+    return mapRecords.filter((r) => {
+      if (start && (!r.submittedAt || r.submittedAt < start || r.submittedAt >= end)) return false;
+      if (mapState.vertical && !DataStore.verticalsOf(r).includes(mapState.vertical)) return false;
+      if (mapState.gender && r.gender !== mapState.gender) return false;
+      return true;
+    });
+  }
+
+  function populateFilterOptions(records) {
+    const verticalSelect = document.getElementById("mapVerticalSelect");
+    const genderSelect = document.getElementById("mapGenderSelect");
+    const genders = Array.from(new Set(records.map((r) => r.gender).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    verticalSelect.innerHTML = `<option value="">All</option>` + DataStore.VERTICALS.map((v) => `<option value="${v.key}">${v.label}</option>`).join("");
+    genderSelect.innerHTML = `<option value="">All</option>` + genders.map((g) => `<option value="${g}">${g}</option>`).join("");
+  }
+
+  function wireFilterBar() {
+    document.getElementById("mapDatePresets").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-preset]");
+      if (!btn) return;
+      mapState.preset = btn.dataset.preset;
+      document.querySelectorAll("#mapDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderAll();
+    });
+    document.getElementById("mapVerticalSelect").addEventListener("change", (e) => {
+      mapState.vertical = e.target.value;
+      renderAll();
+    });
+    document.getElementById("mapGenderSelect").addEventListener("change", (e) => {
+      mapState.gender = e.target.value;
+      renderAll();
+    });
+    document.getElementById("mapClearFiltersBtn").addEventListener("click", () => {
+      mapState.preset = "all";
+      mapState.vertical = "";
+      mapState.gender = "";
+      document.querySelectorAll("#mapDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+      document.getElementById("mapVerticalSelect").value = "";
+      document.getElementById("mapGenderSelect").value = "";
+      renderAll();
+    });
+  }
+
+  /* ============================================================
+     Aggregation — ported from the older map module's js/main.js,
+     renamed to avoid colliding with applied.html/leads.html's own
+     local helpers, and switched from that module's own
+     canonicalizePlace() to this dashboard's AreaSettings.canonicalize
+     (same idea, same alias list, now shared with the Applied page).
+     ============================================================ */
+
+  function districtCounts(records) {
+    const counts = {};
+    records.forEach((r) => {
+      const d = AreaSettings.canonicalize(r.district);
+      if (!d) return;
+      counts[d] = (counts[d] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function areaCountsForDistrict(records, districtName) {
+    const counts = new Map();
+    records.forEach((r) => {
+      if (AreaSettings.canonicalize(r.district) !== districtName) return;
+      const area = AreaSettings.canonicalize(r.area);
+      const key = area || "Area not given";
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .map(([area, count]) => ({ area, count }))
+      .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
+  }
+
+  function topVerticalForDistrict(records, districtName) {
+    const counts = new Map();
+    records.forEach((r) => {
+      if (AreaSettings.canonicalize(r.district) !== districtName) return;
+      DataStore.verticalsOf(r).forEach((v) => counts.set(v, (counts.get(v) || 0) + 1));
+    });
+    let best = null;
+    counts.forEach((count, key) => {
+      if (!best || count > best.count) best = { key, count };
+    });
+    return best ? { label: DataStore.verticalLabel(best.key), count: best.count } : null;
+  }
+
+  function topDistrictForVertical(records, verticalKey) {
+    const counts = new Map();
+    records.forEach((r) => {
+      if (!DataStore.verticalsOf(r).includes(verticalKey)) return;
+      const d = AreaSettings.canonicalize(r.district);
+      if (!d) return;
+      counts.set(d, (counts.get(d) || 0) + 1);
+    });
+    let best = null;
+    counts.forEach((count, name) => {
+      if (!best || count > best.count) best = { name, count };
+    });
+    return best;
+  }
+
+  /* ============================================================
+     KPI header — Top District, Lowest District, Coverage Rate.
+     See the file header comment for what each one means and the
+     judgment calls behind them.
+
+     Judgment call: "Lowest District" mirrors "Top District" — both
+     are computed from dCounts, which (per districtCounts() above)
+     only contains districts with at least 1 applicant in the
+     current filter. So this is the district with the FEWEST
+     applicants among districts that have any at all (not a
+     district with zero — that's what Coverage Rate already
+     reports). The user explicitly corrected this card from a
+     "weakest vertical" reading to a "lowest district" one.
+     ============================================================ */
+
+  function renderKpiRow() {
+    const filtered = getFilteredMapRecords();
+
+    const dCounts = districtCounts(filtered);
+    const dEntriesSorted = Object.entries(dCounts).sort((a, b) => b[1] - a[1]);
+    const topDistrictEntry = dEntriesSorted[0];
+    const topDistrict = topDistrictEntry ? { name: topDistrictEntry[0], count: topDistrictEntry[1] } : null;
+    const lowestDistrictEntry = dEntriesSorted[dEntriesSorted.length - 1];
+    const lowestDistrict = lowestDistrictEntry ? { name: lowestDistrictEntry[0], count: lowestDistrictEntry[1] } : null;
+
+    const districtsCovered = Object.keys(dCounts).length;
+    const totalDistricts = LEBANON_DISTRICTS.length;
+    const coveragePct = totalDistricts ? Math.round((districtsCovered / totalDistricts) * 100) : 0;
+
+    const cards = [
+      {
+        tone: "leads",
+        icon: "map",
+        value: topDistrict ? topDistrict.name : "—",
+        label: topDistrict ? `Top District · ${topDistrict.count} applicant${topDistrict.count === 1 ? "" : "s"}` : "Top District · no data yet",
+      },
+      {
+        tone: "teal",
+        icon: "trending-down",
+        value: lowestDistrict ? lowestDistrict.name : "—",
+        label: lowestDistrict ? `Lowest District · ${lowestDistrict.count} applicant${lowestDistrict.count === 1 ? "" : "s"}` : "Lowest District · no data yet",
+      },
+      {
+        tone: "indigo",
+        icon: "gauge",
+        value: `${coveragePct}%`,
+        label: `Coverage Rate · ${districtsCovered} of ${totalDistricts} districts`,
+      },
+    ];
+
+    document.getElementById("mapKpiRow").innerHTML = cards
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top">
+          <div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div>
+        </div>
+        <div class="ov-kpi-value kpi-value-text">${c.value}</div>
+        <div class="ov-kpi-label">${c.label}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ============================================================
+     Map + detail panel rendering
+     ============================================================ */
+
+  function escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function renderTooltip(district, count, visible) {
+    const tip = document.getElementById("mapTooltip");
+    if (!tip) return;
+    if (!visible || !district) {
+      tip.hidden = true;
+      return;
+    }
+    tip.hidden = false;
+    tip.innerHTML = `<strong>${escapeHtml(district.name)}</strong><span>${count} applicant${count === 1 ? "" : "s"}</span>`;
+  }
+
+  function renderEmptyDetailPanel() {
+    const panel = document.getElementById("mapDetailPanel");
+    if (!panel) return;
+    panel.innerHTML = `
+      <div class="map-detail-empty">
+        <div class="map-detail-empty-icon">${Icons.svg("map", { size: 30 })}</div>
+        <p>Click a district on the map to see its applicant breakdown by area.</p>
+      </div>`;
+  }
+
+  function renderDistrictPanel(district, records) {
+    const panel = document.getElementById("mapDetailPanel");
+    if (!panel) return;
+    const inDistrict = records.filter((r) => AreaSettings.canonicalize(r.district) === district.name);
+    const areas = areaCountsForDistrict(records, district.name);
+    const topArea = areas[0];
+    const topVertical = topVerticalForDistrict(records, district.name);
+    const maxAreaCount = areas.length ? areas[0].count : 1;
+
+    const rows = areas
+      .map(
+        (a) => `
+        <div class="map-area-row">
+          <div class="map-area-row-top">
+            <span class="map-area-name">${escapeHtml(a.area)}</span>
+            <span class="map-area-count">${a.count}</span>
+          </div>
+          <div class="map-area-bar-track">
+            <div class="map-area-bar-fill" style="width:${Math.max(4, (a.count / maxAreaCount) * 100)}%"></div>
+          </div>
+        </div>`
+      )
+      .join("");
+
+    panel.innerHTML = `
+      <button type="button" class="map-detail-back" id="mapDetailBackBtn">${Icons.svg("chevron-left", { size: 14 })} Back to full map</button>
+      <h2 class="map-detail-title">${escapeHtml(district.name)}</h2>
+      <div class="map-detail-sub">${escapeHtml(district.governorate)} Governorate</div>
+
+      <div class="map-detail-stats">
+        <div class="map-detail-stat">
+          <div class="map-detail-stat-value">${inDistrict.length}</div>
+          <div class="map-detail-stat-label">Applicants</div>
+        </div>
+        <div class="map-detail-stat">
+          <div class="map-detail-stat-value">${topArea ? escapeHtml(topArea.area) : "—"}</div>
+          <div class="map-detail-stat-label">Top Area</div>
+        </div>
+        <div class="map-detail-stat">
+          <div class="map-detail-stat-value">${topVertical ? escapeHtml(topVertical.label) : "—"}</div>
+          <div class="map-detail-stat-label">Top Vertical</div>
+        </div>
+      </div>
+
+      <div class="map-detail-heading">Areas in ${escapeHtml(district.name)}</div>
+      ${areas.length ? `<div class="map-area-list">${rows}</div>` : `<p class="map-detail-empty-text" style="color:var(--text-muted); font-size:13px;">No applicants recorded here yet.</p>`}
+    `;
+
+    document.getElementById("mapDetailBackBtn").addEventListener("click", () => {
+      mapState.zoomedDistrictId = null;
+      LebanonMap.zoomOut();
+      renderTooltip(null, 0, false);
+      renderEmptyDetailPanel();
+    });
+  }
+
+  /* ---------------- verticals + top district panel (3x3x3) ---------------- */
+
+  // Informal short words the AI Insights free-text query matcher below
+  // still recognizes ("sitters", "sports", ...) even though the vertical
+  // is now always DISPLAYED with its full name (v.label) everywhere,
+  // including in this same grid — this map is for query matching only.
+  const VERTICAL_QUERY_ALIASES = {
+    Tutoring: "tutors",
+    "Sport Coaching & Fitness Training": "sports",
+    "Music & Art Instructing": "music",
+    "Babysitting and Nannying": "sitters",
+    "Home-Based Therapy": "therapy",
+    Nursing: "nurses",
+    Caregiving: "care",
+    "Beauty Services": "beauty",
+    "Pet Services": "pets",
+  };
+
+  function renderVerticalGrid() {
+    const filtered = getFilteredMapRecords();
+    const grid = document.getElementById("mapVerticalGrid");
+    grid.innerHTML = DataStore.VERTICALS.map((v) => {
+      const top = topDistrictForVertical(filtered, v.key);
+      return `
+      <div class="map-vertical-box" title="${v.label}">
+        <div class="map-vertical-box-head">
+          <span class="map-vertical-box-icon">${Icons.svg(v.icon, { size: 13 })}</span>
+          <span class="map-vertical-box-label">${v.label}</span>
+        </div>
+        <div class="map-vertical-box-district${top ? "" : " is-empty"}">${top ? escapeHtml(top.name) : "No data yet"}</div>
+        <div class="map-vertical-box-district-label">${top ? `Top district · ${top.count} applicant${top.count === 1 ? "" : "s"}` : "Top district"}</div>
+      </div>`;
+    }).join("");
+  }
+
+  /* ============================================================
+     AI Insights — same rule-based, real-numbers-only pattern as
+     applied.html/overview.html.
+     ============================================================ */
+
+  function renderMapInsights() {
+    const filtered = getFilteredMapRecords();
+    const insights = [];
+
+    const dCounts = districtCounts(filtered);
+    const sortedDistricts = Object.entries(dCounts).sort((a, b) => b[1] - a[1]);
+    if (sortedDistricts.length) {
+      const [name, count] = sortedDistricts[0];
+      const pct = filtered.length ? Math.round((count / filtered.length) * 100) : 0;
+      insights.push({ tone: "green", icon: "map", html: `<strong>${escapeHtml(name)}</strong> leads with <strong>${count}</strong> applicant${count === 1 ? "" : "s"} (${pct}% of the current filter).` });
+    } else {
+      insights.push({ tone: "slate", icon: "minus", html: "No applicants with a district on file yet in this filter." });
+    }
+
+    const totalDistricts = LEBANON_DISTRICTS.length;
+    const covered = Object.keys(dCounts).length;
+    const uncovered = totalDistricts - covered;
+    if (uncovered > 0) {
+      insights.push({ tone: "red", icon: "trending-down", html: `<strong>${uncovered}</strong> of Lebanon's ${totalDistricts} districts have no applicants yet in this filter.` });
+    } else if (covered > 0) {
+      insights.push({ tone: "green", icon: "target", html: `Every one of Lebanon's ${totalDistricts} districts has at least one applicant in this filter.` });
+    }
+
+    const vCounts = DataStore.VERTICALS.map((v) => ({ label: v.label, count: filtered.filter((r) => DataStore.verticalsOf(r).includes(v.key)).length }));
+    const weakest = vCounts.slice().sort((a, b) => a.count - b.count)[0];
+    if (weakest) {
+      insights.push({ tone: weakest.count === 0 ? "red" : "slate", icon: "trending-down", html: `<strong>${weakest.label}</strong> has the fewest applicants right now (${weakest.count}).` });
+    }
+
+    const container = document.getElementById("mapInsights");
+    if (!insights.length) {
+      container.innerHTML = `<p class="ov-empty-hint">Nothing to report yet.</p>`;
+      return;
+    }
+    container.innerHTML = insights
+      .slice(0, 3)
+      .map(
+        (i) => `
+        <div class="ov-insight-row ov-insight-tone-${i.tone}">
+          <span class="ov-insight-icon">${Icons.svg(i.icon, { size: 15 })}</span>
+          <span class="ov-insight-text">${i.html}</span>
+        </div>`
+      )
+      .join("");
+  }
+
+  /* ============================================================
+     Render orchestration
+     ============================================================ */
+
+  function renderAll() {
+    const filtered = getFilteredMapRecords();
+    renderKpiRow();
+    LebanonMap.setCounts(districtCounts(filtered));
+    document.getElementById("mapFilteredCount").textContent = `${filtered.length.toLocaleString()} applicant${filtered.length === 1 ? "" : "s"} shown`;
+    if (mapState.zoomedDistrictId) {
+      const d = LEBANON_DISTRICTS.find((x) => x.id === mapState.zoomedDistrictId);
+      if (d) renderDistrictPanel(d, filtered);
+    }
+    renderVerticalGrid();
+    renderMapInsights();
+  }
+
+  /* ============================================================
+     AI Assistant — same rule-based, real-numbers-only pattern as
+     applied.html's/leads.html's AI Assistant.
+     ============================================================ */
+
+  const MAP_AI_SUGGESTIONS = [
+    "Top district?",
+    "Coverage rate?",
+    "Weakest vertical?",
+    "Which districts have no applicants?",
+    "Top district for tutors?",
+  ];
+
+  function mapAiAnswer(question) {
+    const filtered = getFilteredMapRecords();
+    const q = question.toLowerCase();
+    const dCounts = districtCounts(filtered);
+    const totalDistricts = LEBANON_DISTRICTS.length;
+    const covered = Object.keys(dCounts).length;
+
+    if (/coverage/.test(q)) {
+      const pct = totalDistricts ? Math.round((covered / totalDistricts) * 100) : 0;
+      return `Coverage is <strong>${pct}%</strong> — applicants in ${covered} of Lebanon's ${totalDistricts} districts, under the current filter.`;
+    }
+    if (/no applicant|uncovered|missing district|which district.*(no|zero)/.test(q)) {
+      const covered_ = new Set(Object.keys(dCounts));
+      const missing = LEBANON_DISTRICTS.map((d) => d.name).filter((n) => !covered_.has(n));
+      if (!missing.length) return "Every district has at least one applicant in this filter.";
+      return `${missing.length} district${missing.length === 1 ? "" : "s"} with no applicants yet: <strong>${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ", …" : ""}</strong>.`;
+    }
+    if (/weakest|lowest vertical|needs? (the )?most/.test(q)) {
+      const vCounts = DataStore.VERTICALS.map((v) => ({ label: v.label, count: filtered.filter((r) => DataStore.verticalsOf(r).includes(v.key)).length }));
+      const weakest = vCounts.slice().sort((a, b) => a.count - b.count)[0];
+      return weakest ? `<strong>${weakest.label}</strong> has the fewest applicants (${weakest.count}) in this filter.` : "No vertical data yet.";
+    }
+    const verticalMatch = DataStore.VERTICALS.find((v) => q.includes(v.label.toLowerCase()) || q.includes((VERTICAL_QUERY_ALIASES[v.key] || "").toLowerCase()));
+    if (verticalMatch && /top district|where/.test(q)) {
+      const top = topDistrictForVertical(filtered, verticalMatch.key);
+      return top ? `<strong>${escapeHtml(top.name)}</strong> is the top district for ${verticalMatch.label} (${top.count} applicant${top.count === 1 ? "" : "s"}).` : `No ${verticalMatch.label} applicants with a district on file yet in this filter.`;
+    }
+    if (/top district|which district|most applicants/.test(q)) {
+      const sorted = Object.entries(dCounts).sort((a, b) => b[1] - a[1]);
+      if (!sorted.length) return "No district data yet in this filter.";
+      return `<strong>${escapeHtml(sorted[0][0])}</strong> has the most applicants (${sorted[0][1]}) in this filter.`;
+    }
+    return `I can answer questions about the top district, coverage rate, the weakest vertical, districts with no applicants yet, and a specific vertical's top district — try one of the suggestions below.`;
+  }
+
+  function mapAppendAiMessage(text, from) {
+    const log = document.getElementById("mapAiLog");
+    log.insertAdjacentHTML("beforeend", `<div class="ai-chat-msg from-${from}">${text}</div>`);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function wireAiAssistant() {
+    mapAppendAiMessage("Ask me about the map — top districts, coverage, or which vertical needs more reach.", "ai");
+    document.getElementById("mapAiSuggestions").innerHTML = MAP_AI_SUGGESTIONS.map((s) => `<button type="button" class="ai-chat-chip">${s}</button>`).join("");
+
+    const form = document.getElementById("mapAiForm");
+    const input = document.getElementById("mapAiInput");
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (!q) return;
+      mapAppendAiMessage(q, "user");
+      input.value = "";
+      setTimeout(() => mapAppendAiMessage(mapAiAnswer(q), "ai"), 150);
+    });
+
+    document.getElementById("mapAiSuggestions").addEventListener("click", (e) => {
+      const chip = e.target.closest(".ai-chat-chip");
+      if (!chip) return;
+      mapAppendAiMessage(chip.textContent, "user");
+      setTimeout(() => mapAppendAiMessage(mapAiAnswer(chip.textContent), "ai"), 150);
+    });
+  }
+
+  /* ============================================================
+     Bootstrap — runs last, same pattern as leads.html/calls.html/
+     applied.html.
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Map] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "map", root: ".." });
+    initMapPage();
+  }
+</script>
+
+</body>
+</html>

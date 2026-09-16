@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Calls</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Calls</h1>
+      <p class="page-subheading">Call volume, answer rate, who to call next, and how many calls it takes to hit your goal.</p>
+    </div>
+    <div class="ov-header-actions">
+      <span class="ov-updated-at" id="callsUpdatedAt"></span>
+      <button type="button" class="ov-refresh-btn" id="callsRefreshBtn"></button>
+    </div>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-kpi-row" id="callsKpiRow">
+      <div class="ov-skeleton" style="height:130px;"></div>
+      <div class="ov-skeleton" style="height:130px;"></div>
+      <div class="ov-skeleton" style="height:130px;"></div>
+    </div>
+  </section>
+
+  <section class="ov-card leads-filter-card" id="callsFilterCard" hidden>
+    <div class="ov-card-header">
+      <h2 data-i18n="Filter">Filter</h2>
+      <span class="ov-hint">Applies to the KPI row, Follow-Up list, and Top Callers below — never All Verticals</span>
+    </div>
+    <div class="leads-filter-bar">
+      <div class="leads-filter-presets" id="callsDatePresets">
+        <button type="button" data-preset="all" class="active" data-i18n="All Time">All Time</button>
+        <button type="button" data-preset="yesterday" data-i18n="Yesterday">Yesterday</button>
+        <button type="button" data-preset="today" data-i18n="Today">Today</button>
+        <button type="button" data-preset="week" data-i18n="This Week">This Week</button>
+        <button type="button" data-preset="month" data-i18n="This Month">This Month</button>
+        <button type="button" data-preset="custom" id="callsCustomRangeBtn" class="drp-trigger-btn" data-i18n="Custom Range">Custom Range</button>
+      </div>
+      <div class="leads-filter-selects">
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="District">District</span>
+          <select id="callsDistrictSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Area">Area</span>
+          <select id="callsAreaSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Vertical">Vertical</span>
+          <select id="callsVerticalSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Called By">Called By</span>
+          <select id="callsCalledBySelect"><option value="">All</option></select>
+        </label>
+        <button type="button" class="leads-clear-btn" id="callsClearFiltersBtn" data-i18n="Clear filters">Clear filters</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card" id="callsChartCard" hidden>
+        <div class="ov-card-header">
+          <h2>Calls Over Time</h2>
+          <span class="ov-hint">Last 30 days &middot; district/vertical/called by filters apply, date preset doesn't</span>
+        </div>
+        <div class="chart-summary">
+          <span class="chart-summary-value" id="callsChartTotal">0</span>
+          <span class="chart-summary-label" id="callsChartAvg">0/day avg</span>
+        </div>
+        <div class="chart-wrap" id="callsChart"></div>
+      </section>
+
+      <section class="ov-card leads-table-card" id="callsFollowUpCard" hidden>
+        <div class="ov-card-header">
+          <h2>Follow-Up Calls</h2>
+          <span class="ov-hint" id="callsFollowUpHint"></span>
+        </div>
+        <div class="leads-table-scroll">
+          <table class="leads-table" id="callsFollowUpTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Mobile</th>
+                <th>Vertical</th>
+                <th>Last Contacted</th>
+                <th>Days Since</th>
+              </tr>
+            </thead>
+            <tbody id="callsFollowUpBody"></tbody>
+          </table>
+        </div>
+        <div class="leads-table-pagination" id="callsFollowUpPagination"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card" id="callsVerticalCard" hidden>
+        <div class="ov-card-header">
+          <h2>All Verticals</h2>
+          <span class="ov-hint">All-time calls made &middot; not affected by filters above &middot; highlighted box is your most-called vertical</span>
+        </div>
+        <div class="ov-vertical-grid side-vertical-grid" id="callsVerticalGrid"></div>
+      </section>
+
+      <section class="ov-card" id="callsGaugeCard" hidden>
+        <div class="ov-card-header">
+          <h2>Calls Needed</h2>
+          <span class="ov-hint">Based on your all-time calls-to-applications rate &middot; not affected by filters above</span>
+        </div>
+        <div class="gauge-tabs" id="callsGaugeTabs">
+          <button type="button" data-period="today" class="active">Today</button>
+          <button type="button" data-period="week">This Week</button>
+          <button type="button" data-period="month">This Month</button>
+        </div>
+        <div class="gauge-svg-wrap" id="callsGaugeSvgWrap"></div>
+        <div class="gauge-readout">
+          <div class="gauge-value-big" id="callsGaugeValue">—</div>
+          <div class="gauge-value-unit" id="callsGaugeUnit">calls</div>
+          <p class="gauge-sub" id="callsGaugeSub"></p>
+        </div>
+        <div class="gauge-slider-block">
+          <div class="gauge-slider-label">
+            <span>Target applications</span>
+            <span id="callsGaugeSliderValue">5</span>
+          </div>
+          <input type="range" id="callsGaugeSlider" min="0" max="20" step="1" value="5" />
+        </div>
+        <div class="gauge-legend">
+          <span class="gauge-legend-item"><span class="gauge-legend-dot" style="background:#22c55e"></span>Easy reach</span>
+          <span class="gauge-legend-item"><span class="gauge-legend-dot" style="background:#e8a33d"></span>Moderate push</span>
+          <span class="gauge-legend-item"><span class="gauge-legend-dot" style="background:#e05252"></span>Big stretch</span>
+        </div>
+      </section>
+
+      <section class="ov-card" id="callsTopCallersCard" hidden>
+        <div class="ov-card-header">
+          <h2>Top Callers</h2>
+          <span class="ov-hint">Ranked by calls made &middot; respects filters above</span>
+        </div>
+        <div class="ov-team-list" id="callsTopCallersList"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dateRangePicker.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/statusSettings.js"></script>
+<script src="../shared/goals.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/verticalTargets.js"></script>
+<script src="../shared/areaSettings.js"></script>
+<script src="../shared/team.js"></script>
+<script src="../shared/chartSettings.js"></script>
+<script src="../shared/chart.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  function initCallsPage() {
+    const refreshBtn = document.getElementById("callsRefreshBtn");
+    refreshBtn.innerHTML = `${Icons.svg("clock", { size: 15 })}<span>Refresh</span>`;
+    refreshBtn.addEventListener("click", () => loadCallsData());
+
+    wireFilterBar();
+    wireGauge();
+    loadCallsData();
+  }
+
+  /* ============================================================
+     Data loading — same pattern as leads.html (see its comments for
+     the reasoning behind the NEEDS_SHEETS_SCOPE reconnect flow).
+     ============================================================ */
+
+  const CARD_IDS = ["callsFilterCard", "callsChartCard", "callsFollowUpCard", "callsVerticalCard", "callsGaugeCard", "callsTopCallersCard"];
+
+  async function loadCallsData() {
+    document.getElementById("callsKpiRow").innerHTML = `
+      <div class="ov-skeleton" style="height:130px;"></div>
+      <div class="ov-skeleton" style="height:130px;"></div>
+      <div class="ov-skeleton" style="height:130px;"></div>`;
+    document.getElementById("callsRefreshBtn").classList.add("spinning");
+
+    try {
+      const { records } = await SheetsClient.fetchAll();
+      DataStore.setRecords(records);
+      CARD_IDS.forEach((id) => (document.getElementById(id).hidden = false));
+      populateFilterOptions(records);
+      renderCallsAll();
+      document.getElementById("callsUpdatedAt").textContent =
+        "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    } catch (err) {
+      renderCallsDataError(err);
+    } finally {
+      document.getElementById("callsRefreshBtn").classList.remove("spinning");
+    }
+  }
+
+  function renderCallsDataError(err) {
+    console.error("[Calls] Failed to load Sheets data:", err);
+    const needsScope = err.code === "NEEDS_SHEETS_SCOPE";
+    const message = needsScope ? "This dashboard needs permission to read your Google Sheet." : "Couldn't load your recruitment data right now.";
+    const detail = !needsScope && err.message ? `<p class="ov-reconnect-detail">${err.message}</p>` : "";
+    document.getElementById("callsKpiRow").innerHTML = `
+      <div class="ov-reconnect" style="grid-column: 1 / -1;">
+        <p>${message}</p>
+        ${detail}
+        <button type="button" id="callsReconnectBtn">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+      </div>`;
+    CARD_IDS.forEach((id) => (document.getElementById(id).hidden = true));
+    document.getElementById("callsReconnectBtn").addEventListener("click", async (e) => {
+      if (!needsScope) {
+        loadCallsData();
+        return;
+      }
+      e.target.disabled = true;
+      e.target.textContent = "Connecting…";
+      const oldMsg = document.querySelector("#callsKpiRow .reauth-fail-msg");
+      if (oldMsg) oldMsg.remove();
+      try {
+        await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+        loadCallsData();
+      } catch (err2) {
+        e.target.disabled = false;
+        e.target.textContent = "Connect Google Sheets";
+        e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${err2.message}</p>`);
+      }
+    });
+  }
+
+  /* ============================================================
+     Filter state
+     ------------------------------------------------------------
+     Same shape/behavior as leads.html's leadsFilters — page-local,
+     doesn't touch any other page. Unlike Leads, this filter bar
+     deliberately does NOT drive the KPI row, All Verticals, or the
+     Calls Over Time chart's date range (those are fixed, per the
+     "never the KPI row or All Verticals" hint above); it drives the
+     Follow-Up list and Top Callers, and (district/area/vertical/
+     called by only, not the date preset) the chart's per-day counts.
+     ============================================================ */
+
+  const callsFilters = { preset: "all", district: "", area: "", vertical: "", calledBy: "", customStart: null, customEnd: null };
+
+  function datePresetRange(preset) {
+    const { startOfDay, startOfWeek, startOfMonth, addDays, addMonths } = DataStore._dateHelpers;
+    const now = new Date();
+    if (preset === "today") return { start: startOfDay(now), end: addDays(startOfDay(now), 1) };
+    if (preset === "yesterday") {
+      const y = addDays(startOfDay(now), -1);
+      return { start: y, end: addDays(y, 1) };
+    }
+    if (preset === "week") return { start: startOfWeek(now), end: addDays(startOfWeek(now), 7) };
+    if (preset === "month") return { start: startOfMonth(now), end: addMonths(startOfMonth(now), 1) };
+    if (preset === "custom" && callsFilters.customStart && callsFilters.customEnd) {
+      return { start: callsFilters.customStart, end: addDays(callsFilters.customEnd, 1) };
+    }
+    return { start: null, end: null };
+  }
+
+  function matchesNonDateFilters(r) {
+    if (callsFilters.district && AreaSettings.canonicalize(r.district) !== callsFilters.district) return false;
+    if (callsFilters.area && AreaSettings.canonicalize(r.area) !== callsFilters.area) return false;
+    if (callsFilters.vertical && !DataStore.verticalsOf(r).includes(callsFilters.vertical)) return false;
+    if (callsFilters.calledBy && r.calledBy !== callsFilters.calledBy) return false;
+    return true;
+  }
+
+  function getFilteredCallsRecords() {
+    const all = DataStore.getAllRecords();
+    const { start, end } = datePresetRange(callsFilters.preset);
+    return all.filter((r) => {
+      if (start && (!r.dateContacted || r.dateContacted < start || r.dateContacted >= end)) return false;
+      return matchesNonDateFilters(r);
+    });
+  }
+
+  // For the chart: district/vertical/called by filters apply, but the date
+  // preset doesn't (a fixed "last 30 days" trend line wouldn't make sense
+  // truncated to e.g. "Today").
+  function getFilteredCallsRecordsForChart() {
+    return DataStore.getAllRecords().filter(matchesNonDateFilters);
+  }
+
+  function populateFilterOptions(records) {
+    const districtSelect = document.getElementById("callsDistrictSelect");
+    const areaSelect = document.getElementById("callsAreaSelect");
+    const verticalSelect = document.getElementById("callsVerticalSelect");
+    const calledBySelect = document.getElementById("callsCalledBySelect");
+
+    const districts = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.district)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const areas = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.area)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const callers = Team.getCallers(records);
+
+    districtSelect.innerHTML = `<option value="">All</option>` + districts.map((d) => `<option value="${d}">${d}</option>`).join("");
+    areaSelect.innerHTML = `<option value="">All</option>` + areas.map((a) => `<option value="${a}">${a}</option>`).join("");
+    verticalSelect.innerHTML = `<option value="">All</option>` + DataStore.VERTICALS.map((v) => `<option value="${v.key}">${v.label}</option>`).join("");
+    calledBySelect.innerHTML = `<option value="">All</option>` + callers.map((c) => `<option value="${c}">${c}</option>`).join("");
+  }
+
+  function wireFilterBar() {
+    document.getElementById("callsDatePresets").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-preset]");
+      if (!btn || btn.dataset.preset === "custom") return;
+      callsFilters.preset = btn.dataset.preset;
+      callsFilters.customStart = null;
+      callsFilters.customEnd = null;
+      document.querySelectorAll("#callsDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderCallsFiltered();
+    });
+    DateRangePicker.attach(document.getElementById("callsCustomRangeBtn"), {
+      getInitial: () => ({ start: callsFilters.customStart, end: callsFilters.customEnd }),
+      onApply: (start, end) => {
+        callsFilters.preset = "custom";
+        callsFilters.customStart = start;
+        callsFilters.customEnd = end;
+        const btn = document.getElementById("callsCustomRangeBtn");
+        btn.textContent = `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+        document.querySelectorAll("#callsDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+        renderCallsFiltered();
+      },
+      onClear: () => {
+        callsFilters.preset = "all";
+        callsFilters.customStart = null;
+        callsFilters.customEnd = null;
+        const btn = document.getElementById("callsCustomRangeBtn");
+        btn.textContent = "Custom Range";
+        document.querySelectorAll("#callsDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+        renderCallsFiltered();
+      },
+    });
+    document.getElementById("callsDistrictSelect").addEventListener("change", (e) => {
+      callsFilters.district = e.target.value;
+      renderCallsFiltered();
+      renderChart();
+    });
+    document.getElementById("callsAreaSelect").addEventListener("change", (e) => {
+      callsFilters.area = e.target.value;
+      renderCallsFiltered();
+      renderChart();
+    });
+    document.getElementById("callsVerticalSelect").addEventListener("change", (e) => {
+      callsFilters.vertical = e.target.value;
+      renderCallsFiltered();
+      renderChart();
+    });
+    document.getElementById("callsCalledBySelect").addEventListener("change", (e) => {
+      callsFilters.calledBy = e.target.value;
+      renderCallsFiltered();
+      renderChart();
+    });
+    document.getElementById("callsClearFiltersBtn").addEventListener("click", () => {
+      callsFilters.preset = "all";
+      callsFilters.district = "";
+      callsFilters.area = "";
+      callsFilters.vertical = "";
+      callsFilters.calledBy = "";
+      callsFilters.customStart = null;
+      callsFilters.customEnd = null;
+      document.getElementById("callsCustomRangeBtn").textContent = "Custom Range";
+      document.querySelectorAll("#callsDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+      document.getElementById("callsDistrictSelect").value = "";
+      document.getElementById("callsAreaSelect").value = "";
+      document.getElementById("callsVerticalSelect").value = "";
+      document.getElementById("callsCalledBySelect").value = "";
+      renderCallsFiltered();
+      renderChart();
+    });
+  }
+
+  /* ============================================================
+     Render orchestration
+     ============================================================ */
+
+  function renderCallsAll() {
+    renderVerticalGridPanel(); // unfiltered — all-time calls made per vertical
+    renderChart();
+    renderGauge(); // unfiltered — all-time conversion rate
+    renderCallsFiltered(); // KPI row + follow-up list + top callers, respects the filter bar
+  }
+
+  // Per your request, the KPI row now responds to the filter bar too (it
+  // used to be fixed/all-time, same as All Verticals still is) — so it,
+  // the follow-up list, and Top Callers all re-render together here.
+  function renderCallsFiltered() {
+    const filtered = getFilteredCallsRecords();
+    renderKpiRow(filtered);
+    renderFollowUpList(filtered);
+    renderTopCallers(filtered);
+  }
+
+  /* ---------------- KPI row (now respects the filter bar above) ---------------- */
+
+  // Same big trend-badge pattern as leads.html's trendBadge (see its
+  // comment) — duplicated locally rather than shared because each page's
+  // script is self-contained by convention (see e.g. every other render
+  // function in this file and in leads.html).
+  function trendBadge(pop, periodLabel) {
+    if (pop.deltaPct === null) {
+      return pop.current > 0
+        ? `<span class="ov-kpi-trend big up">${Icons.svg("trending-up", { size: 14 })}New</span>`
+        : `<span class="ov-kpi-trend big flat">${Icons.svg("minus", { size: 14 })}No activity yet</span>`;
+    }
+    if (pop.direction === "flat") return `<span class="ov-kpi-trend big flat">${Icons.svg("minus", { size: 14 })}Same as ${periodLabel}</span>`;
+    const icon = pop.direction === "up" ? "trending-up" : "trending-down";
+    const sign = pop.direction === "up" ? "+" : "";
+    return `<span class="ov-kpi-trend big ${pop.direction}">${Icons.svg(icon, { size: 14 })}${sign}${pop.deltaPct}% vs ${periodLabel}</span>`;
+  }
+
+  function renderKpiRow(filteredRecords) {
+    const all = filteredRecords || getFilteredCallsRecords();
+    const totalLeads = all.length;
+    const team = Team.metricsForTeam(all);
+    const followUpCount = all.filter((r) => StatusSettings.classify(r.status) === "followUp").length;
+
+    const callsPop = DataStore.periodOverPeriod(all, (r) => !!r.calledBy, "week");
+    const answeredPop = DataStore.periodOverPeriod(all, (r) => !!r.calledBy && !Team.isNoAnswer(r.status), "week");
+    const followUpPop = DataStore.periodOverPeriod(all, (r) => StatusSettings.classify(r.status) === "followUp", "week");
+
+    const cards = [
+      {
+        tone: "calls", icon: "phone-call", value: team.callsMade,
+        label: "Total Calls Made", sub: `out of ${totalLeads.toLocaleString()} total leads`,
+        pop: callsPop,
+      },
+      {
+        tone: "teal", icon: "check", value: team.answered,
+        label: "Answered Calls", sub: `${team.connectRate ?? 0}% connect rate`,
+        pop: answeredPop,
+      },
+      {
+        tone: "indigo", icon: "phone-missed", value: followUpCount,
+        label: "Follow-Up Calls", sub: "waiting on a next call",
+        pop: followUpPop,
+      },
+    ];
+
+    // Per request: no trend arrows on any of the 3 Calls KPI boxes anymore
+    // (Total Calls Made / Answered Calls / Follow-Up Calls) — just the plain
+    // numbers. pop is still computed above in case a future card wants it.
+    document.getElementById("callsKpiRow").innerHTML = cards
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top">
+          <div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div>
+        </div>
+        <div class="ov-kpi-value kpi-value-big">${c.value.toLocaleString()}</div>
+        <div class="ov-kpi-label">${I18n.t(c.label)} &middot; ${I18n.t(c.sub)}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- all-time vertical grid (calls made, 3x3x3) ---------------- */
+
+  function renderVerticalGridPanel() {
+    const records = DataStore.getAllRecords(); // deliberately unfiltered
+    const stats = DataStore.VERTICALS.map((v) => ({ v, stats: DataStore.verticalStats(records, v.key) }));
+    const topCalls = Math.max(0, ...stats.map((s) => s.stats.callsMade));
+
+    const grid = document.getElementById("callsVerticalGrid");
+    grid.innerHTML = stats
+      .map(({ v, stats: s }) => {
+        const isTop = topCalls > 0 && s.callsMade === topCalls;
+        return `
+        <div class="ov-vertical-box${isTop ? " top-vertical" : ""}" title="${v.label}">
+          <div class="ov-vertical-box-head">
+            <span class="ov-vertical-box-icon">${Icons.svg(v.icon, { size: 14 })}</span>
+            <span class="ov-vertical-box-label">${v.label}</span>
+          </div>
+          <div class="ov-vertical-box-count">${s.callsMade}</div>
+          <div class="ov-vertical-box-count-label">calls made</div>
+        </div>`;
+      })
+      .join("");
+  }
+
+  /* ---------------- Calls Over Time chart ---------------- */
+
+  function renderChart() {
+    const records = getFilteredCallsRecordsForChart();
+    const series = DataStore.timeSeries(records, "daily", (r) => !!r.calledBy, 30);
+    const total = series.reduce((s, p) => s + p.count, 0);
+    const avg = series.length ? Math.round((total / series.length) * 10) / 10 : 0;
+    document.getElementById("callsChartTotal").textContent = total.toLocaleString();
+    document.getElementById("callsChartAvg").textContent = `${avg}/day avg over 30 days`;
+    Chart.render(document.getElementById("callsChart"), series, { tone: "primary" });
+  }
+
+  // Live-updates this chart if the Chart Style is changed in Settings in
+  // another tab (same cross-tab "storage" pattern Theme/I18n already use).
+  window.addEventListener("storage", (e) => {
+    if (e.key === "servi_v2_chart_type") renderChart();
+  });
+
+  /* ---------------- Follow-up calls list ---------------- */
+
+  function daysSince(date) {
+    if (!date) return null;
+    return Math.floor((Date.now() - date.getTime()) / 86400000);
+  }
+
+  const URGENT_DAYS = 7;
+  const followUpTableState = { page: 1, pageSize: 10 };
+
+  function renderFollowUpList(filteredRecords) {
+    const rows = filteredRecords
+      .filter((r) => StatusSettings.classify(r.status) === "followUp")
+      .map((r) => ({ r, days: daysSince(r.dateContacted) }))
+      .sort((a, b) => (b.days ?? -1) - (a.days ?? -1));
+
+    document.getElementById("callsFollowUpHint").textContent =
+      `${rows.length.toLocaleString()} lead${rows.length === 1 ? "" : "s"} waiting on a follow-up call`;
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / followUpTableState.pageSize));
+    followUpTableState.page = Math.min(followUpTableState.page, totalPages);
+    const start = (followUpTableState.page - 1) * followUpTableState.pageSize;
+    const pageRows = rows.slice(start, start + followUpTableState.pageSize);
+
+    document.getElementById("callsFollowUpBody").innerHTML = pageRows.length
+      ? pageRows
+          .map(({ r, days }) => {
+            const urgent = days !== null && days >= URGENT_DAYS;
+            return `
+            <tr>
+              <td>${r.fullName}</td>
+              <td>${r.mobile || "—"}</td>
+              <td>${DataStore.verticalsOf(r).map((v) => DataStore.verticalLabel(v)).join(", ") || "—"}</td>
+              <td>${r.dateContacted ? r.dateContacted.toLocaleDateString() : "—"}</td>
+              <td><span class="calls-days-pill${urgent ? " urgent" : ""}">${days === null ? "—" : `${days} day${days === 1 ? "" : "s"}`}</span></td>
+            </tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:22px 0;">No follow-ups waiting in this filter — nice and clear.</td></tr>`;
+
+    const pag = document.getElementById("callsFollowUpPagination");
+    if (totalPages <= 1) {
+      pag.innerHTML = "";
+    } else {
+      pag.innerHTML = `
+        <button type="button" id="callsFollowUpPrev" ${followUpTableState.page <= 1 ? "disabled" : ""}>Prev</button>
+        <span>Page ${followUpTableState.page} of ${totalPages}</span>
+        <button type="button" id="callsFollowUpNext" ${followUpTableState.page >= totalPages ? "disabled" : ""}>Next</button>`;
+      document.getElementById("callsFollowUpPrev")?.addEventListener("click", () => {
+        followUpTableState.page--;
+        renderFollowUpList(getFilteredCallsRecords());
+      });
+      document.getElementById("callsFollowUpNext")?.addEventListener("click", () => {
+        followUpTableState.page++;
+        renderFollowUpList(getFilteredCallsRecords());
+      });
+    }
+  }
+
+  /* ---------------- Top 5 callers ---------------- */
+
+  function renderTopCallers(filteredRecords) {
+    const callers = Team.getCallers(filteredRecords)
+      .map((name) => ({ name, m: Team.metricsFor(filteredRecords, name) }))
+      .sort((a, b) => b.m.callsMade - a.m.callsMade)
+      .slice(0, 5);
+
+    const list = document.getElementById("callsTopCallersList");
+    if (!callers.length) {
+      list.innerHTML = `<p style="font-size:13px; color:var(--text-muted); padding:12px 2px;">No calls logged yet in this filter.</p>`;
+      return;
+    }
+
+    list.innerHTML = callers
+      .map(({ name, m }, i) => {
+        const isTop = i === 0;
+        return `
+        <div class="ov-team-row${isTop ? " rank-1" : ""}">
+          <div class="ov-team-avatar${isTop ? " size-lg" : ""}" style="background:${Team.toneFor(name)}">${Team.initials(name)}</div>
+          <div class="ov-team-info">
+            <div class="ov-team-name">${name}${isTop ? `<span class="ov-team-crown">${Icons.svg("crown", { size: 14 })}</span>` : ""}</div>
+            <div class="ov-team-sub">${m.answered} answered &middot; ${m.applied} applied</div>
+          </div>
+          <div>
+            <div class="ov-team-stat-big">${m.callsMade}</div>
+            <div class="ov-team-stat-sub">calls</div>
+          </div>
+        </div>`;
+      })
+      .join("");
+  }
+
+  /* ============================================================
+     Calls-needed gauge
+     ------------------------------------------------------------
+     Per your call: uses the ALL-TIME calls→applications rate
+     (Team.metricsForTeam over every record ever called), not a
+     trailing window and not filtered by the page's filter bar —
+     same "fixed, all-time" treatment as the KPI row and All
+     Verticals above. If you'd rather set this rate manually instead
+     of computing it, that's a small follow-up (a new editable
+     setting, same pattern as shared/verticalTargets.js) — just ask.
+     ============================================================ */
+
+  const gaugeState = { period: "today", target: 5 };
+  const GAUGE_SLIDER_MAX = { today: 20, week: 60, month: 200 };
+  const GAUGE_PERIOD_LABEL = { today: "today", week: "this week", month: "this month" };
+  const GAUGE_PER_DAY_DIVISOR = { week: 7, month: 30 };
+
+  function allTimeConversionRate() {
+    const team = Team.metricsForTeam(DataStore.getAllRecords());
+    return team.callsMade > 0 ? team.applied / team.callsMade : 0;
+  }
+
+  function gaugeSvg(value, max) {
+    const cx = 100, cy = 100, r = 80;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const pointAt = (deg, radius) => ({ x: cx + radius * Math.cos(toRad(deg)), y: cy - radius * Math.sin(toRad(deg)) });
+    function arcPath(startDeg, endDeg, radius) {
+      const p1 = pointAt(startDeg, radius);
+      const p2 = pointAt(endDeg, radius);
+      const largeArc = Math.abs(startDeg - endDeg) > 180 ? 1 : 0;
+      return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${radius} ${radius} 0 ${largeArc} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+    }
+
+    const zones = [
+      { from: 180, to: 120, color: "#22c55e" },
+      { from: 120, to: 60, color: "#e8a33d" },
+      { from: 60, to: 0, color: "#e05252" },
+    ];
+    const zonePaths = zones
+      .map((z) => `<path d="${arcPath(z.from, z.to, r)}" stroke="${z.color}" stroke-width="14" fill="none" />`)
+      .join("");
+
+    const fraction = Math.max(0, Math.min(1, max > 0 ? value / max : 0));
+    const needleDeg = 180 - fraction * 180;
+    const tip = pointAt(needleDeg, r - 16);
+
+    return `
+      <svg viewBox="0 0 200 112" class="gauge-svg">
+        ${zonePaths}
+        <line x1="${cx}" y1="${cy}" x2="${tip.x.toFixed(2)}" y2="${tip.y.toFixed(2)}" class="gauge-needle" stroke-width="3.5" stroke-linecap="round" />
+        <circle cx="${cx}" cy="${cy}" r="7" class="gauge-pivot" />
+        <circle cx="${cx}" cy="${cy}" r="3" class="gauge-pivot-inner" />
+      </svg>`;
+  }
+
+  function renderGauge() {
+    const rate = allTimeConversionRate();
+    const target = gaugeState.target;
+    const periodLabel = GAUGE_PERIOD_LABEL[gaugeState.period];
+    const sliderMax = GAUGE_SLIDER_MAX[gaugeState.period];
+
+    const slider = document.getElementById("callsGaugeSlider");
+    slider.max = sliderMax;
+    if (Number(slider.value) > sliderMax) slider.value = sliderMax;
+    gaugeState.target = Number(slider.value);
+    document.getElementById("callsGaugeSliderValue").textContent = `${gaugeState.target} application${gaugeState.target === 1 ? "" : "s"} ${periodLabel}`;
+
+    if (rate <= 0) {
+      document.getElementById("callsGaugeValue").textContent = "—";
+      document.getElementById("callsGaugeUnit").textContent = "";
+      document.getElementById("callsGaugeSub").textContent =
+        "Not enough data yet to estimate this — log a few applications against your calls first.";
+      document.getElementById("callsGaugeSvgWrap").innerHTML = gaugeSvg(0, 1);
+      return;
+    }
+
+    const callsNeeded = Math.max(0, Math.ceil(target / rate));
+    const gaugeMax = Math.max(10, Math.ceil((callsNeeded * 1.5) / 10) * 10);
+
+    document.getElementById("callsGaugeValue").textContent = callsNeeded.toLocaleString();
+    document.getElementById("callsGaugeUnit").textContent = callsNeeded === 1 ? "call" : "calls";
+
+    let sub = `to hit ${target} application${target === 1 ? "" : "s"} ${periodLabel}, at your ${Math.round(rate * 1000) / 10}% all-time close rate`;
+    if (GAUGE_PER_DAY_DIVISOR[gaugeState.period] && target > 0) {
+      const perDay = Math.ceil(callsNeeded / GAUGE_PER_DAY_DIVISOR[gaugeState.period]);
+      sub += ` (~${perDay.toLocaleString()}/day)`;
+    }
+    document.getElementById("callsGaugeSub").textContent = sub;
+    document.getElementById("callsGaugeSvgWrap").innerHTML = gaugeSvg(callsNeeded, gaugeMax);
+  }
+
+  function wireGauge() {
+    document.getElementById("callsGaugeTabs").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-period]");
+      if (!btn) return;
+      gaugeState.period = btn.dataset.period;
+      document.querySelectorAll("#callsGaugeTabs button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderGauge();
+    });
+
+    const slider = document.getElementById("callsGaugeSlider");
+    slider.addEventListener("input", () => {
+      gaugeState.target = Number(slider.value);
+      renderGauge();
+    });
+    // "the user will scroll" — support the mouse wheel too, one application
+    // per notch, alongside the native drag/keyboard handling on the slider.
+    slider.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const dir = e.deltaY > 0 ? -1 : 1;
+        const max = Number(slider.max);
+        gaugeState.target = Math.max(0, Math.min(max, gaugeState.target + dir));
+        slider.value = gaugeState.target;
+        renderGauge();
+      },
+      { passive: false }
+    );
+  }
+
+  /* ============================================================
+     Bootstrap — runs last, same pattern as leads.html/overview.html.
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Calls] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "calls", root: ".." });
+    initCallsPage();
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Applied</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+<!-- Renders the downloadable freelancer profile card (per-applicant "Download
+     Card" button below) to a PNG. Same version/CDN this project's earlier
+     dashboard used for the identical feature (see servi-unified-dashboard/
+     applied/profile.html). -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Applied</h1>
+      <p class="page-subheading">Applications over time, who applied, and which verticals are converting best.</p>
+    </div>
+    <div class="ov-header-actions">
+      <span class="ov-updated-at" id="appliedUpdatedAt"></span>
+      <button type="button" class="ov-refresh-btn" id="appliedRefreshBtn"></button>
+    </div>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-kpi-row cols-4" id="appliedKpiRow">
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+    </div>
+  </section>
+
+  <section class="ov-card leads-filter-card" id="appliedFilterCard" hidden>
+    <div class="ov-card-header">
+      <h2 data-i18n="Filter">Filter</h2>
+      <span class="ov-hint">Applies to the chart and applicant list below — never the KPI row or All Verticals</span>
+    </div>
+    <div class="leads-filter-bar">
+      <div class="leads-filter-presets" id="appliedDatePresets">
+        <button type="button" data-preset="all" class="active" data-i18n="All Time">All Time</button>
+        <button type="button" data-preset="yesterday" data-i18n="Yesterday">Yesterday</button>
+        <button type="button" data-preset="today" data-i18n="Today">Today</button>
+        <button type="button" data-preset="week" data-i18n="This Week">This Week</button>
+        <button type="button" data-preset="month" data-i18n="This Month">This Month</button>
+        <button type="button" data-preset="custom" id="appliedCustomRangeBtn" class="drp-trigger-btn" data-i18n="Custom Range">Custom Range</button>
+      </div>
+      <div class="leads-filter-selects">
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="District">District</span>
+          <select id="appliedDistrictSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Area">Area</span>
+          <select id="appliedAreaSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Vertical">Vertical</span>
+          <select id="appliedVerticalSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Gender">Gender</span>
+          <select id="appliedGenderSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label" data-i18n="Specialty">Specialty</span>
+          <select id="appliedSpecialtySelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap" title="Only show applicants with at least this many years of experience in their primary applied category">
+          <span class="leads-select-label" data-i18n="Min Years Exp.">Min Years Exp.</span>
+          <input type="number" min="0" step="1" id="appliedMinYearsInput" placeholder="Any" />
+        </label>
+        <label class="leads-select-wrap" title="Age, computed from Date of Birth on file">
+          <span class="leads-select-label" data-i18n="Age">Age</span>
+          <input type="number" min="0" max="99" id="appliedMinAgeInput" placeholder="Min" />
+          <span class="range-sep">–</span>
+          <input type="number" min="0" max="99" id="appliedMaxAgeInput" placeholder="Max" />
+        </label>
+        <button type="button" class="leads-clear-btn" id="appliedClearFiltersBtn" data-i18n="Clear filters">Clear filters</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card" id="appliedChartCard" hidden>
+        <div class="ov-card-header">
+          <h2>Applied Over Time</h2>
+          <span class="ov-hint">Last 30 days &middot; district/vertical/gender filters apply, date preset doesn't</span>
+        </div>
+        <div class="chart-summary">
+          <span class="chart-summary-value" id="appliedChartTotal">0</span>
+          <span class="chart-summary-label" id="appliedChartAvg">0/day avg</span>
+        </div>
+        <div class="chart-wrap" id="appliedChart"></div>
+      </section>
+
+      <section class="ov-card" id="appliedListCard" hidden>
+        <div class="ov-card-header">
+          <h2>Applicants</h2>
+          <span class="ov-hint" id="appliedListHint"></span>
+        </div>
+        <div class="applied-sort-bar">
+          <label for="appliedSortSelect">Sort by</label>
+          <select id="appliedSortSelect">
+            <option value="name">Name (A–Z)</option>
+            <option value="age">Age</option>
+            <option value="gender">Gender</option>
+            <option value="vertical">Vertical</option>
+            <option value="district">District</option>
+          </select>
+        </div>
+        <div class="applied-list" id="appliedList"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card" id="appliedVerticalCard" hidden>
+        <div class="ov-card-header">
+          <h2>All Verticals</h2>
+          <span class="ov-hint">All-time applications &middot; not affected by filters above &middot; highlighted box is your top vertical</span>
+        </div>
+        <div class="ov-vertical-grid side-vertical-grid" id="appliedVerticalGrid"></div>
+      </section>
+
+      <section class="ov-card" id="appliedInsightsCard" hidden>
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="appliedInsights"></div>
+      </section>
+
+      <section class="ov-card ai-chat-card" id="appliedAiCard" hidden>
+        <div class="ov-card-header">
+          <h2>AI Assistant</h2>
+          <span class="ov-hint">Answers from your real numbers</span>
+        </div>
+        <div class="ai-chat-log" id="appliedAiLog"></div>
+        <form class="ai-chat-form" id="appliedAiForm">
+          <input type="text" id="appliedAiInput" placeholder="Ask about your applicants…" autocomplete="off" />
+          <button type="submit" aria-label="Send"></button>
+        </form>
+        <div class="ai-chat-suggestions" id="appliedAiSuggestions"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dateRangePicker.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/statusSettings.js"></script>
+<script src="../shared/goals.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/areaSettings.js"></script>
+<script src="../shared/specialtySettings.js"></script>
+<script src="../shared/phoneFormat.js"></script>
+<script src="../shared/chartSettings.js"></script>
+<script src="../shared/chart.js"></script>
+<script src="../shared/legacyApplied.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     Applied page
+     ------------------------------------------------------------
+     Reads a THIRD, separate Google Sheet — the Fillout.com-fed
+     "Freelancer Onboarding Form-2" spreadsheet (see AppliedSheetConfig
+     in sheetsConfig.js), not the main recruitment sheet Leads/Calls
+     use. This is a real spreadsheet you pointed us at directly (2
+     screenshots + a full export of the "From Fillout" tab), not a
+     guess.
+
+     Deliberately uses its own page-local `appliedRecords` array
+     instead of DataStore.setRecords()/getAllRecords() — an applied
+     record has a fundamentally different shape than a Leads/Calls
+     record (no dateContacted/calledBy/status), so reusing DataStore's
+     Leads-oriented aggregation functions (kpis/statusBuckets/
+     goalProgress) would silently misclassify data that was never
+     shaped like a lead in the first place. What IS reused directly:
+     DataStore.VERTICALS/verticalsOf/verticalLabel/_dateHelpers/
+     goalPeriodRange, and AreaSettings.canonicalize — those are
+     schema-agnostic. The period-over-period and time-series helpers
+     below are small local rewrites of DataStore's versions, scoped to
+     this sheet's `submittedAt` field instead of `dateContacted` — same
+     convention as every other page here (each page's script is
+     self-contained rather than reaching into shared page-specific
+     logic).
+     ============================================================ */
+
+  let appliedRecords = [];
+
+  function initAppliedPage() {
+    const refreshBtn = document.getElementById("appliedRefreshBtn");
+    refreshBtn.innerHTML = `${Icons.svg("clock", { size: 15 })}<span>Refresh</span>`;
+    refreshBtn.addEventListener("click", () => loadAppliedData());
+
+    wireFilterBar();
+    wireSortControl();
+    wireAiAssistant();
+    loadAppliedData();
+  }
+
+  /* ============================================================
+     Data loading — same NEEDS_SHEETS_SCOPE reconnect pattern as
+     leads.html/calls.html (see their comments for the reasoning).
+     ============================================================ */
+
+  const CARD_IDS = ["appliedFilterCard", "appliedChartCard", "appliedListCard", "appliedVerticalCard", "appliedInsightsCard", "appliedAiCard"];
+
+  // The old Fillout form ("Fillout Old - Freelancer Application results") has
+  // no live sheet anymore -- see legacyApplied.js's header comment -- so its
+  // 75 real applicants are baked in statically and merged in here, alongside
+  // whatever the live "From Fillout" sheet returns, exactly once per load.
+  function withLegacyApplied(liveRecords) {
+    const legacy = (typeof LEGACY_APPLIED !== "undefined" ? LEGACY_APPLIED : []).map((r) => ({
+      ...r,
+      dob: r.dob ? new Date(r.dob) : null,
+      submittedAt: r.submittedAt ? new Date(r.submittedAt) : null,
+    }));
+    return [...liveRecords, ...legacy];
+  }
+
+  async function loadAppliedData() {
+    document.getElementById("appliedKpiRow").innerHTML = `
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>`;
+    document.getElementById("appliedRefreshBtn").classList.add("spinning");
+
+    try {
+      const { records } = await SheetsClient.fetchApplied();
+      appliedRecords = withLegacyApplied(records);
+      CARD_IDS.forEach((id) => (document.getElementById(id).hidden = false));
+      populateFilterOptions(appliedRecords);
+      renderAppliedAll();
+      document.getElementById("appliedUpdatedAt").textContent =
+        "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    } catch (err) {
+      renderAppliedDataError(err);
+    } finally {
+      document.getElementById("appliedRefreshBtn").classList.remove("spinning");
+    }
+  }
+
+  function renderAppliedDataError(err) {
+    console.error("[Applied] Failed to load Sheets data:", err);
+    const needsScope = err.code === "NEEDS_SHEETS_SCOPE";
+    const message = needsScope ? "This dashboard needs permission to read your Google Sheet." : "Couldn't load your applications data right now.";
+    const detail = !needsScope && err.message ? `<p class="ov-reconnect-detail">${err.message}</p>` : "";
+    document.getElementById("appliedKpiRow").innerHTML = `
+      <div class="ov-reconnect" style="grid-column: 1 / -1;">
+        <p>${message}</p>
+        ${detail}
+        <button type="button" id="appliedReconnectBtn">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+      </div>`;
+    CARD_IDS.forEach((id) => (document.getElementById(id).hidden = true));
+    document.getElementById("appliedReconnectBtn").addEventListener("click", async (e) => {
+      if (!needsScope) {
+        loadAppliedData();
+        return;
+      }
+      e.target.disabled = true;
+      e.target.textContent = "Connecting…";
+      const oldMsg = document.querySelector("#appliedKpiRow .reauth-fail-msg");
+      if (oldMsg) oldMsg.remove();
+      try {
+        await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+        loadAppliedData();
+      } catch (err2) {
+        e.target.disabled = false;
+        e.target.textContent = "Connect Google Sheets";
+        e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${err2.message}</p>`);
+      }
+    });
+  }
+
+  /* ============================================================
+     Filter state — same shape/behavior as leads.html/calls.html's
+     filter objects. The date preset + district/area/vertical/gender
+     apply to the Applicants list; the chart follows district/area/
+     vertical/gender only (its date range is a fixed last-30-days
+     trend line, same reasoning as the Calls Over Time chart).
+     ============================================================ */
+
+  const appliedFilters = {
+    preset: "all", district: "", area: "", vertical: "", gender: "", specialty: "", customStart: null, customEnd: null,
+    // New, for manual Booking filtering (per request: filter by years of
+    // experience and an age range in addition to the existing filters).
+    minYears: "", minAge: "", maxAge: "",
+  };
+
+  // Same free-text-years parsing and "one headline experience figure per
+  // person" logic as aiTools.js's search_freelancers tool — kept as its
+  // own local copy per this project's "each page's script is
+  // self-contained" convention (see file header comment above).
+  function parseYearsNumber(raw) {
+    const m = String(raw || "").match(/\d+(\.\d+)?/);
+    return m ? Number(m[0]) : null;
+  }
+  function primaryServiceDetail(rec) {
+    const details = rec.serviceDetails || {};
+    const firstKey = Object.keys(details)[0];
+    return firstKey ? details[firstKey] : null;
+  }
+
+  function datePresetRange(preset) {
+    const { startOfDay, startOfWeek, startOfMonth, addDays, addMonths } = DataStore._dateHelpers;
+    const now = new Date();
+    if (preset === "today") return { start: startOfDay(now), end: addDays(startOfDay(now), 1) };
+    if (preset === "yesterday") {
+      const y = addDays(startOfDay(now), -1);
+      return { start: y, end: addDays(y, 1) };
+    }
+    if (preset === "week") return { start: startOfWeek(now), end: addDays(startOfWeek(now), 7) };
+    if (preset === "month") return { start: startOfMonth(now), end: addMonths(startOfMonth(now), 1) };
+    if (preset === "custom" && appliedFilters.customStart && appliedFilters.customEnd) {
+      return { start: appliedFilters.customStart, end: addDays(appliedFilters.customEnd, 1) };
+    }
+    return { start: null, end: null };
+  }
+
+  function matchesNonDateFilters(r) {
+    if (appliedFilters.district && AreaSettings.canonicalize(r.district) !== appliedFilters.district) return false;
+    if (appliedFilters.area && AreaSettings.canonicalize(r.area) !== appliedFilters.area) return false;
+    if (appliedFilters.vertical && !DataStore.verticalsOf(r).includes(appliedFilters.vertical)) return false;
+    if (appliedFilters.gender && r.gender !== appliedFilters.gender) return false;
+    if (appliedFilters.specialty && !SpecialtySettings.matches(r, appliedFilters.specialty)) return false;
+    if (appliedFilters.minYears !== "") {
+      const years = parseYearsNumber((primaryServiceDetail(r) || {}).years);
+      if (years === null || years < Number(appliedFilters.minYears)) return false;
+    }
+    if (appliedFilters.minAge !== "") {
+      const age = ageFromDob(r.dob);
+      if (age === null || age < Number(appliedFilters.minAge)) return false;
+    }
+    if (appliedFilters.maxAge !== "") {
+      const age = ageFromDob(r.dob);
+      if (age === null || age > Number(appliedFilters.maxAge)) return false;
+    }
+    return true;
+  }
+
+  function getFilteredApplied() {
+    const { start, end } = datePresetRange(appliedFilters.preset);
+    return appliedRecords.filter((r) => {
+      if (start && (!r.submittedAt || r.submittedAt < start || r.submittedAt >= end)) return false;
+      return matchesNonDateFilters(r);
+    });
+  }
+
+  // For the chart: district/vertical/gender filters apply, but the date
+  // preset doesn't — same reasoning as Calls' getFilteredCallsRecordsForChart.
+  function getFilteredAppliedForChart() {
+    return appliedRecords.filter(matchesNonDateFilters);
+  }
+
+  function populateFilterOptions(records) {
+    const districtSelect = document.getElementById("appliedDistrictSelect");
+    const areaSelect = document.getElementById("appliedAreaSelect");
+    const verticalSelect = document.getElementById("appliedVerticalSelect");
+    const genderSelect = document.getElementById("appliedGenderSelect");
+    const specialtySelect = document.getElementById("appliedSpecialtySelect");
+
+    const districts = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.district)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const areas = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.area)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const genders = Array.from(new Set(records.map((r) => r.gender).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    const specialties = SpecialtySettings.optionsFrom(records);
+
+    districtSelect.innerHTML = `<option value="">All</option>` + districts.map((d) => `<option value="${d}">${d}</option>`).join("");
+    areaSelect.innerHTML = `<option value="">All</option>` + areas.map((a) => `<option value="${a}">${a}</option>`).join("");
+    verticalSelect.innerHTML = `<option value="">All</option>` + DataStore.VERTICALS.map((v) => `<option value="${v.key}">${v.label}</option>`).join("");
+    genderSelect.innerHTML = `<option value="">All</option>` + genders.map((g) => `<option value="${g}">${g}</option>`).join("");
+    specialtySelect.innerHTML = `<option value="">All</option>` + specialties.map((s) => `<option value="${s}">${s}</option>`).join("");
+  }
+
+  function wireFilterBar() {
+    document.getElementById("appliedDatePresets").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-preset]");
+      if (!btn || btn.dataset.preset === "custom") return;
+      appliedFilters.preset = btn.dataset.preset;
+      appliedFilters.customStart = null;
+      appliedFilters.customEnd = null;
+      document.querySelectorAll("#appliedDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderAppliedFiltered();
+    });
+    DateRangePicker.attach(document.getElementById("appliedCustomRangeBtn"), {
+      getInitial: () => ({ start: appliedFilters.customStart, end: appliedFilters.customEnd }),
+      onApply: (start, end) => {
+        appliedFilters.preset = "custom";
+        appliedFilters.customStart = start;
+        appliedFilters.customEnd = end;
+        const btn = document.getElementById("appliedCustomRangeBtn");
+        btn.textContent = `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+        document.querySelectorAll("#appliedDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+        renderAppliedFiltered();
+      },
+      onClear: () => {
+        appliedFilters.preset = "all";
+        appliedFilters.customStart = null;
+        appliedFilters.customEnd = null;
+        const btn = document.getElementById("appliedCustomRangeBtn");
+        btn.textContent = "Custom Range";
+        document.querySelectorAll("#appliedDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+        renderAppliedFiltered();
+      },
+    });
+    document.getElementById("appliedDistrictSelect").addEventListener("change", (e) => {
+      appliedFilters.district = e.target.value;
+      renderAppliedFiltered();
+      renderChart();
+    });
+    document.getElementById("appliedAreaSelect").addEventListener("change", (e) => {
+      appliedFilters.area = e.target.value;
+      renderAppliedFiltered();
+      renderChart();
+    });
+    document.getElementById("appliedVerticalSelect").addEventListener("change", (e) => {
+      appliedFilters.vertical = e.target.value;
+      renderAppliedFiltered();
+      renderChart();
+    });
+    document.getElementById("appliedGenderSelect").addEventListener("change", (e) => {
+      appliedFilters.gender = e.target.value;
+      renderAppliedFiltered();
+      renderChart();
+    });
+    document.getElementById("appliedSpecialtySelect").addEventListener("change", (e) => {
+      appliedFilters.specialty = e.target.value;
+      renderAppliedFiltered();
+      renderChart();
+    });
+    document.getElementById("appliedMinYearsInput").addEventListener("input", (e) => {
+      appliedFilters.minYears = e.target.value === "" ? "" : e.target.value;
+      renderAppliedFiltered();
+      renderChart();
+    });
+    document.getElementById("appliedMinAgeInput").addEventListener("input", (e) => {
+      appliedFilters.minAge = e.target.value === "" ? "" : e.target.value;
+      renderAppliedFiltered();
+      renderChart();
+    });
+    document.getElementById("appliedMaxAgeInput").addEventListener("input", (e) => {
+      appliedFilters.maxAge = e.target.value === "" ? "" : e.target.value;
+      renderAppliedFiltered();
+      renderChart();
+    });
+    document.getElementById("appliedClearFiltersBtn").addEventListener("click", () => {
+      appliedFilters.preset = "all";
+      appliedFilters.district = "";
+      appliedFilters.area = "";
+      appliedFilters.vertical = "";
+      appliedFilters.gender = "";
+      appliedFilters.specialty = "";
+      appliedFilters.minYears = "";
+      appliedFilters.minAge = "";
+      appliedFilters.maxAge = "";
+      appliedFilters.customStart = null;
+      appliedFilters.customEnd = null;
+      document.getElementById("appliedCustomRangeBtn").textContent = "Custom Range";
+      document.querySelectorAll("#appliedDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+      document.getElementById("appliedDistrictSelect").value = "";
+      document.getElementById("appliedAreaSelect").value = "";
+      document.getElementById("appliedVerticalSelect").value = "";
+      document.getElementById("appliedGenderSelect").value = "";
+      document.getElementById("appliedSpecialtySelect").value = "";
+      document.getElementById("appliedMinYearsInput").value = "";
+      document.getElementById("appliedMinAgeInput").value = "";
+      document.getElementById("appliedMaxAgeInput").value = "";
+      renderAppliedFiltered();
+      renderChart();
+    });
+  }
+
+  const appliedListState = { sort: "name" };
+
+  function wireSortControl() {
+    document.getElementById("appliedSortSelect").addEventListener("change", (e) => {
+      appliedListState.sort = e.target.value;
+      renderAppliedList(getFilteredApplied());
+    });
+  }
+
+  /* ============================================================
+     Render orchestration
+     ============================================================ */
+
+  function renderAppliedAll() {
+    renderKpiRow();
+    renderVerticalGridPanel(); // unfiltered — all-time applications per vertical
+    renderChart();
+    renderAppliedInsights(); // unfiltered — real, all-time numbers
+    renderAppliedFiltered();
+  }
+
+  function renderAppliedFiltered() {
+    renderAppliedList(getFilteredApplied());
+  }
+
+  /* ---------------- age, from Date of Birth ----------------
+     The sheet stores Date of Birth, not a raw age number — this
+     computes age honestly from it. A handful of DOB values in the real
+     data are implausible (typos, placeholder dates, or someone born
+     after they applied) and produce ages like -1, 0, 100, 118, 123, and
+     124 — clearly wrong, not real applicants of those ages. Rather than
+     silently guessing a "corrected" age, an implausible one is shown as
+     "—" (same as no DOB at all) so the list never displays a number that
+     can't be true. 1..89 is treated as the plausible working-age range
+     for a freelancer applicant; anything outside it (including exactly
+     0) returns null. */
+
+  function ageFromDob(dob) {
+    if (!dob) return null;
+    const now = new Date();
+    let age = now.getFullYear() - dob.getFullYear();
+    const m = now.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
+    return age >= 1 && age < 90 ? age : null;
+  }
+
+  /* ---------------- local period-over-period / time-series,
+     scoped to `submittedAt` (see file header for why these are local
+     rewrites of DataStore.periodOverPeriod/timeSeries rather than
+     reusing them directly). ---------------- */
+
+  function appliedPeriodOverPeriod(records, matchFn, period) {
+    const { startOfDay, startOfWeek, startOfMonth, addDays, addMonths } = DataStore._dateHelpers;
+    const now = new Date();
+    let curStart, prevStart, prevEnd;
+    if (period === "day") {
+      curStart = startOfDay(now);
+      prevStart = addDays(curStart, -1);
+      prevEnd = curStart;
+    } else if (period === "month") {
+      curStart = startOfMonth(now);
+      prevStart = addMonths(curStart, -1);
+      prevEnd = curStart;
+    } else {
+      curStart = startOfWeek(now);
+      prevStart = addDays(curStart, -7);
+      prevEnd = curStart;
+    }
+    const withDate = records.filter((r) => r.submittedAt && matchFn(r));
+    const current = withDate.filter((r) => r.submittedAt >= curStart).length;
+    const previous = withDate.filter((r) => r.submittedAt >= prevStart && r.submittedAt < prevEnd).length;
+    let deltaPct = null;
+    if (previous > 0) deltaPct = Math.round(((current - previous) / previous) * 1000) / 10;
+    const direction = current === previous ? "flat" : current > previous ? "up" : "down";
+    return { current, previous, deltaPct, direction };
+  }
+
+  function appliedTimeSeries(records, count) {
+    const { startOfDay, addDays } = DataStore._dateHelpers;
+    const now = new Date();
+    const n = count || 30;
+    const buckets = [];
+    for (let i = n - 1; i >= 0; i--) {
+      const day = addDays(startOfDay(now), -i);
+      buckets.push({ label: day.toLocaleDateString(undefined, { month: "short", day: "numeric" }), start: day, end: addDays(day, 1) });
+    }
+    const withDate = records.filter((r) => r.submittedAt);
+    return buckets.map((b) => ({
+      label: b.label,
+      count: withDate.filter((r) => r.submittedAt >= b.start && r.submittedAt < b.end).length,
+    }));
+  }
+
+  /* ---------------- KPI row (fixed periods, never filtered) ---------------- */
+
+  // Same big trend-badge pattern as leads.html/calls.html — duplicated
+  // locally per this project's "each page's script is self-contained"
+  // convention (see e.g. calls.html's own copy of this function).
+  function trendBadge(pop, periodLabel) {
+    if (pop.deltaPct === null) {
+      return pop.current > 0
+        ? `<span class="ov-kpi-trend big up">${Icons.svg("trending-up", { size: 14 })}New</span>`
+        : `<span class="ov-kpi-trend big flat">${Icons.svg("minus", { size: 14 })}No activity yet</span>`;
+    }
+    if (pop.direction === "flat") return `<span class="ov-kpi-trend big flat">${Icons.svg("minus", { size: 14 })}Same as ${periodLabel}</span>`;
+    const icon = pop.direction === "up" ? "trending-up" : "trending-down";
+    const sign = pop.direction === "up" ? "+" : "";
+    return `<span class="ov-kpi-trend big ${pop.direction}">${Icons.svg(icon, { size: 14 })}${sign}${pop.deltaPct}% vs ${periodLabel}</span>`;
+  }
+
+  function renderKpiRow() {
+    const all = appliedRecords;
+    const { startOfDay, startOfWeek, startOfMonth } = DataStore._dateHelpers;
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const weekStart = startOfWeek(now);
+    const monthStart = startOfMonth(now);
+    const countSince = (start) => all.filter((r) => r.submittedAt && r.submittedAt >= start).length;
+
+    const cards = [
+      // Per request: Total Applied loses its trend arrow (plain all-time
+      // count); Applied Today/This Week/This Month explicitly keep theirs.
+      { tone: "applied", icon: "inbox", value: all.length, label: "Total Applied", sub: "All-time", noArrow: true },
+      { tone: "calls", icon: "calendar", value: countSince(todayStart), label: "Applied Today", sub: "New applications today", pop: appliedPeriodOverPeriod(all, () => true, "day"), popLabel: "yesterday" },
+      { tone: "teal", icon: "trending-up", value: countSince(weekStart), label: "Applied This Week", sub: "Since Monday", pop: appliedPeriodOverPeriod(all, () => true, "week"), popLabel: "last week" },
+      { tone: "indigo", icon: "bar-chart-2", value: countSince(monthStart), label: "Applied This Month", sub: "Since the 1st", pop: appliedPeriodOverPeriod(all, () => true, "month"), popLabel: "last month" },
+    ];
+
+    document.getElementById("appliedKpiRow").innerHTML = cards
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top">
+          <div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div>
+          ${c.noArrow ? "" : trendBadge(c.pop, c.popLabel)}
+        </div>
+        <div class="ov-kpi-value kpi-value-big">${c.value.toLocaleString()}</div>
+        <div class="ov-kpi-label">${I18n.t(c.label)} &middot; ${I18n.t(c.sub)}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- all-time vertical grid (applications, 3x3x3) ---------------- */
+
+  // Decorative-only accent colors for the Applicants list's left-border
+  // (see .applied-row in shell.css) — one per vertical, so the list is
+  // scannable by vertical at a glance without needing a legend.
+  const VERTICAL_COLORS = {
+    Tutoring: "#ee6a2c",
+    "Sport Coaching & Fitness Training": "#22c3ae",
+    "Music & Art Instructing": "#8b7cf0",
+    "Babysitting and Nannying": "#e8a33d",
+    "Home-Based Therapy": "#2f9e6a",
+    Nursing: "#4f8fe0",
+    Caregiving: "#c8511f",
+    "Beauty Services": "#d6457a",
+    "Pet Services": "#6f5adb",
+  };
+
+  function renderVerticalGridPanel() {
+    const records = appliedRecords; // deliberately unfiltered
+    const stats = DataStore.VERTICALS.map((v) => ({ v, count: records.filter((r) => DataStore.verticalsOf(r).includes(v.key)).length }));
+    const topCount = Math.max(0, ...stats.map((s) => s.count));
+
+    const grid = document.getElementById("appliedVerticalGrid");
+    grid.innerHTML = stats
+      .map(({ v, count }) => {
+        const isTop = topCount > 0 && count === topCount;
+        return `
+        <div class="ov-vertical-box${isTop ? " top-vertical" : ""}" title="${v.label}">
+          <div class="ov-vertical-box-head">
+            <span class="ov-vertical-box-icon">${Icons.svg(v.icon, { size: 14 })}</span>
+            <span class="ov-vertical-box-label">${v.label}</span>
+          </div>
+          <div class="ov-vertical-box-count">${count}</div>
+          <div class="ov-vertical-box-count-label">applied</div>
+        </div>`;
+      })
+      .join("");
+  }
+
+  /* ---------------- Applied Over Time chart ---------------- */
+
+  function renderChart() {
+    const records = getFilteredAppliedForChart();
+    const series = appliedTimeSeries(records, 30);
+    const total = series.reduce((s, p) => s + p.count, 0);
+    const avg = series.length ? Math.round((total / series.length) * 10) / 10 : 0;
+    document.getElementById("appliedChartTotal").textContent = total.toLocaleString();
+    document.getElementById("appliedChartAvg").textContent = `${avg}/day avg over 30 days`;
+    Chart.render(document.getElementById("appliedChart"), series, { tone: "good" });
+  }
+
+  // Live-updates this chart if the Chart Style is changed in Settings in
+  // another tab (same cross-tab "storage" pattern Theme/I18n already use).
+  window.addEventListener("storage", (e) => {
+    if (e.key === "servi_v2_chart_type") renderChart();
+  });
+
+  /* ---------------- Applicants list ----------------
+     One slim, left-border-accented row per applicant — per the explicit
+     "compact... one per line, dont make the box big with unessasary
+     gaps" ask. Sortable by name/age/gender/vertical/district; no
+     pagination needed since the list scrolls within a fixed-height card
+     (see .applied-list in shell.css). */
+
+  function sortApplied(records, sortKey) {
+    const arr = records.slice();
+    if (sortKey === "age") {
+      arr.sort((a, b) => (ageFromDob(a.dob) ?? -1) - (ageFromDob(b.dob) ?? -1));
+    } else if (sortKey === "gender") {
+      arr.sort((a, b) => (a.gender || "").localeCompare(b.gender || ""));
+    } else if (sortKey === "vertical") {
+      const label = (r) => {
+        const v = DataStore.verticalsOf(r)[0];
+        return v ? DataStore.verticalLabel(v) : "";
+      };
+      arr.sort((a, b) => label(a).localeCompare(label(b)));
+    } else if (sortKey === "district") {
+      arr.sort((a, b) => AreaSettings.canonicalize(a.district).localeCompare(AreaSettings.canonicalize(b.district)));
+    } else {
+      arr.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    }
+    return arr;
+  }
+
+  function renderAppliedList(filteredRecords) {
+    const sorted = sortApplied(filteredRecords, appliedListState.sort);
+    document.getElementById("appliedListHint").textContent =
+      `${sorted.length.toLocaleString()} applicant${sorted.length === 1 ? "" : "s"} matching current filters`;
+
+    const list = document.getElementById("appliedList");
+    if (!sorted.length) {
+      list.innerHTML = `<p class="applied-empty">No applicants match this filter.</p>`;
+      return;
+    }
+
+    list.innerHTML = sorted
+      .map((r, i) => {
+        const age = ageFromDob(r.dob);
+        const primary = DataStore.verticalsOf(r)[0];
+        const color = primary ? VERTICAL_COLORS[primary] : "var(--border-strong)";
+        const vertLabel = primary ? DataStore.verticalLabel(primary) : "—";
+        const district = AreaSettings.canonicalize(r.district) || "—";
+        const mobile = PhoneFormat.format(r.mobile) || "—";
+        return `
+        <div class="applied-row" style="--vertical-color:${color}">
+          <span class="applied-row-name">${r.fullName}</span>
+          <span class="applied-row-meta">${age !== null ? age + " yrs" : "—"} &middot; ${r.gender || "—"} &middot; ${district} &middot; ${mobile}</span>
+          <span class="applied-row-vertical" title="${vertLabel}">${vertLabel}</span>
+          <button type="button" class="applied-row-book-btn" data-idx="${i}" title="${I18n.t("Book")}" aria-label="Book ${escapeHtml(r.fullName)}">${Icons.svg("calendar-check", { size: 14 })}</button>
+          <button type="button" class="applied-row-download-btn" data-idx="${i}" title="${I18n.t("Download Card")}" aria-label="Download ${escapeHtml(r.fullName)}'s Servi Freelancer Profile card">${Icons.svg("download", { size: 14 })}</button>
+        </div>`;
+      })
+      .join("");
+
+    // Event delegation (not one listener per row) since this list re-renders
+    // on every filter change — `sorted` is captured by this closure so the
+    // button's data-idx always maps back to the exact record it was built
+    // from, even though the DOM gets fully replaced above.
+    list.querySelectorAll(".applied-row-download-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const rec = sorted[Number(btn.dataset.idx)];
+        if (rec) downloadFreelancerCard(rec, btn);
+      });
+    });
+    list.querySelectorAll(".applied-row-book-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const rec = sorted[Number(btn.dataset.idx)];
+        if (rec) openBookModal(rec);
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  /* ============================================================
+     Downloadable "Servi Freelancer Profile" card
+     ------------------------------------------------------------
+     Ported from servi-unified-dashboard/applied's identical feature
+     (js/profilePage.js's buildFreelancerCardHtml/downloadProfile) —
+     same off-screen-build + html2canvas-capture approach, same "only
+     show a section when there's something real to put in it" rule.
+
+     Narrower than the legacy card on purpose: v2's Applied sheet
+     integration (see sheetsClient.js's fetchApplied) doesn't fetch a
+     University, Languages Spoken, or Max Travel Distance column the
+     way the legacy dashboard's did — those fields simply aren't part
+     of this project's data model, so rather than inventing values for
+     them, this card only ever shows fields v2 actually has: name,
+     phone, district/area, vertical(s), years of experience, self-
+     rated skill level, and cleaned subjects/specialties.
+
+     The "Based in: District, <stray URL>" bug the user flagged is
+     fixed at its source, not patched here — see AreaSettings.
+     canonicalize()'s stripStrayLink(), which every district/area
+     value already goes through before it reaches this card.
+     ============================================================ */
+
+  function joinWithAnd(items) {
+    const list = items.filter(Boolean);
+    if (list.length <= 1) return list.join("");
+    if (list.length === 2) return list.join(" & ");
+    return `${list.slice(0, -1).join(", ")} & ${list[list.length - 1]}`;
+  }
+
+  function fcSection(title, bodyHtml) {
+    if (!bodyHtml) return "";
+    return `<div class="fc-section"><div class="fc-section-title">${escapeHtml(title)}</div>${bodyHtml}</div>`;
+  }
+
+  function fcSubjectsHtml(rec) {
+    const items = SpecialtySettings.specialtiesOf(rec);
+    if (!items.length) return "";
+    return `<ul class="fc-bullets">${items.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`;
+  }
+
+  function fcLocationHtml(rec) {
+    const based = AreaSettings.canonicalize(rec.district) || AreaSettings.canonicalize(rec.area);
+    if (!based) return "";
+    return `<div class="fc-plain"><strong>Based in:</strong> ${escapeHtml(based)}</div>`;
+  }
+
+  function buildFreelancerCardHtml(rec) {
+    const keys = DataStore.verticalsOf(rec);
+    const roleLine = joinWithAnd(keys.map((k) => DataStore.verticalLabel(k)));
+    const detail = primaryServiceDetailForCard(rec);
+    const experience = (detail && detail.years) || "";
+    const skillLevel = (detail && detail.skillLevel) || "";
+    const phone = PhoneFormat.format(rec.mobile);
+    const district = AreaSettings.canonicalize(rec.district);
+    const subtitleText = [roleLine, district].filter(Boolean).join(" · ");
+
+    return `
+      <div class="fc-head">
+        <h1 class="fc-name">${escapeHtml(rec.fullName)}</h1>
+        <div class="fc-brand">
+          <div class="fc-brand-servi">SERVI</div>
+          <div class="fc-brand-sub">Freelancer Profile</div>
+        </div>
+      </div>
+      ${subtitleText ? `<div class="fc-subtitle">★ ${escapeHtml(subtitleText)}</div>` : ""}
+      <div class="fc-stats">
+        <div class="fc-stat"><div class="fc-stat-value">${experience ? escapeHtml(experience) : "&mdash;"}</div><div class="fc-stat-label">Experience</div></div>
+        <div class="fc-stat"><div class="fc-stat-value">${skillLevel ? escapeHtml(skillLevel) : "&mdash;"}</div><div class="fc-stat-label">Self-Rated Skill Level</div></div>
+      </div>
+      ${phone ? `
+      <div class="fc-contact">
+        <span class="fc-contact-label">Direct Contact</span>
+        <span class="fc-contact-value">${escapeHtml(phone)}</span>
+      </div>` : ""}
+      ${fcSection("Subjects & Specialties", fcSubjectsHtml(rec))}
+      ${fcSection("Location", fcLocationHtml(rec))}
+      <hr class="fc-divider" />
+      <div class="fc-footer">Servi Freelancer Profile</div>`;
+  }
+
+  function primaryServiceDetailForCard(rec) {
+    const details = rec.serviceDetails || {};
+    const firstKey = Object.keys(details)[0];
+    return firstKey ? details[firstKey] : null;
+  }
+
+  function safeFileName(s) {
+    return String(s || "profile").trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "profile";
+  }
+
+  function downloadFreelancerCard(rec, triggerBtn) {
+    if (typeof html2canvas === "undefined") {
+      if (triggerBtn) triggerBtn.title = "Couldn't build the image — try again.";
+      return;
+    }
+    if (triggerBtn) triggerBtn.classList.add("is-busy");
+    const wrap = document.createElement("div");
+    wrap.className = "freelancer-card-offscreen";
+    wrap.innerHTML = `<div class="fc-card" id="fcCardInner">${buildFreelancerCardHtml(rec)}</div>`;
+    document.body.appendChild(wrap);
+    const inner = wrap.querySelector("#fcCardInner");
+    html2canvas(inner, { backgroundColor: "#ffffff", scale: 2, useCORS: true })
+      .then((canvas) => {
+        const link = document.createElement("a");
+        link.download = `${safeFileName(rec.fullName)}-servi-card.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      })
+      .catch(() => {
+        if (triggerBtn) triggerBtn.title = "Couldn't download this card — try again.";
+      })
+      .finally(() => {
+        wrap.remove();
+        if (triggerBtn) triggerBtn.classList.remove("is-busy");
+      });
+  }
+
+  /* ============================================================
+     Manual Booking — "Book" button per applicant
+     ------------------------------------------------------------
+     Opens a client-info form (new — see the generic .modal-* CSS added
+     to shell.css for this). Submitting: (1) appends the client's info as
+     a new row in the "Client" tab, (2) fetches the current Bookings sheet
+     to mint a fresh Booking ID (vertical prefix + today's date + a
+     same-day sequence number), then (3) appends a new "Bookings" row
+     joining that client info + this freelancer's info + their vertical —
+     Price/Date/Duration/Rating/Review start blank (per your spec: those
+     only get filled in once the actual session has happened) and Status
+     starts "Scheduled". See ClientConfig/BookingsConfig in
+     sheetsConfig.js for the full column mapping and the Booking ID
+     column judgment call.
+
+     District gets a <datalist> of the same 26 real Lebanese district
+     names AppliedSheetConfig.AREA_COLUMNS already lists (just typing aid,
+     not a hard-enforced dropdown) — Area/Street/Building/Block/Floor are
+     plain free text, matching exactly what the Client/Bookings sheets
+     store.
+     ============================================================ */
+
+  function districtNameOptions() {
+    return AppliedSheetConfig.AREA_COLUMNS.map((c) => c.replace(/^Area in /, "")).sort((a, b) => a.localeCompare(b));
+  }
+
+  function closeBookModal() {
+    const overlay = document.getElementById("bookModalOverlay");
+    if (overlay) overlay.remove();
+  }
+
+  function openBookModal(rec) {
+    closeBookModal();
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.id = "bookModalOverlay";
+    const districts = districtNameOptions();
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">Book ${escapeHtml(rec.fullName)}</h3>
+            <div class="modal-subtitle">Fill in the client's info — this creates the client record and the booking.</div>
+          </div>
+          <button type="button" class="modal-close-btn" id="bookModalCloseBtn" aria-label="Close">${Icons.svg("x", { size: 16 })}</button>
+        </div>
+        <div class="modal-body">
+          <form id="bookModalForm">
+            <div class="modal-form-grid">
+              <div class="settings-field"><label>Client First Name</label><input type="text" id="bkClientFirst" required /></div>
+              <div class="settings-field"><label>Client Last Name</label><input type="text" id="bkClientLast" required /></div>
+              <div class="settings-field span-2"><label>Phone Number</label><input type="tel" id="bkClientPhone" required /></div>
+              <div class="settings-field"><label>District</label><input type="text" id="bkClientDistrict" list="bkDistrictList" /></div>
+              <div class="settings-field"><label>Area</label><input type="text" id="bkClientArea" /></div>
+              <div class="settings-field"><label>Street</label><input type="text" id="bkClientStreet" /></div>
+              <div class="settings-field"><label>Building</label><input type="text" id="bkClientBuilding" /></div>
+              <div class="settings-field"><label>Block</label><input type="text" id="bkClientBlock" /></div>
+              <div class="settings-field"><label>Floor</label><input type="text" id="bkClientFloor" /></div>
+            </div>
+            <datalist id="bkDistrictList">${districts.map((d) => `<option value="${escapeHtml(d)}"></option>`).join("")}</datalist>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <span class="modal-status" id="bookModalStatus"></span>
+          <button type="button" class="modal-btn" id="bookModalCancelBtn">Cancel</button>
+          <button type="submit" form="bookModalForm" class="modal-btn primary" id="bookModalSubmitBtn">Schedule Booking</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById("bookModalCloseBtn").addEventListener("click", closeBookModal);
+    document.getElementById("bookModalCancelBtn").addEventListener("click", closeBookModal);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) closeBookModal(); });
+
+    document.getElementById("bookModalForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const statusEl = document.getElementById("bookModalStatus");
+      const submitBtn = document.getElementById("bookModalSubmitBtn");
+
+      const clientFields = {
+        firstName: document.getElementById("bkClientFirst").value.trim(),
+        lastName: document.getElementById("bkClientLast").value.trim(),
+        phone: document.getElementById("bkClientPhone").value.trim(),
+        district: document.getElementById("bkClientDistrict").value.trim(),
+        area: document.getElementById("bkClientArea").value.trim(),
+        street: document.getElementById("bkClientStreet").value.trim(),
+        building: document.getElementById("bkClientBuilding").value.trim(),
+        block: document.getElementById("bkClientBlock").value.trim(),
+        floor: document.getElementById("bkClientFloor").value.trim(),
+      };
+      if (!clientFields.firstName || !clientFields.lastName || !clientFields.phone) {
+        statusEl.className = "modal-status err";
+        statusEl.textContent = "First name, last name, and phone are required.";
+        return;
+      }
+
+      submitBtn.disabled = true;
+      statusEl.className = "modal-status";
+      statusEl.textContent = "Saving…";
+      try {
+        await SheetsClient.appendClient(clientFields);
+
+        // Fresh fetch (not a cached list) so the Booking ID's same-day
+        // sequence number never collides with a booking someone else just
+        // made — see SheetsClient.generateBookingId's header comment.
+        const { bookings: existingBookings } = await SheetsClient.fetchBookings();
+        const vertical = DataStore.verticalsOf(rec)[0] || "";
+        const bookingId = SheetsClient.generateBookingId(vertical, existingBookings);
+
+        await SheetsClient.appendBooking({
+          clientFirstName: clientFields.firstName,
+          clientLastName: clientFields.lastName,
+          clientPhone: clientFields.phone,
+          district: clientFields.district,
+          area: clientFields.area,
+          street: clientFields.street,
+          building: clientFields.building,
+          block: clientFields.block,
+          floor: clientFields.floor,
+          freelancerFirstName: rec.firstName,
+          freelancerLastName: rec.lastName,
+          freelancerPhone: PhoneFormat.format(rec.mobile) || rec.mobile,
+          vertical,
+          status: "Scheduled",
+          bookingId,
+        });
+
+        statusEl.className = "modal-status ok";
+        statusEl.textContent = `Booked — ID ${bookingId}. See it on the Bookings page.`;
+        setTimeout(closeBookModal, 1100);
+      } catch (err) {
+        console.error("[Applied] Failed to create booking:", err);
+        statusEl.className = "modal-status err";
+        statusEl.textContent = err.message || "Something went wrong — try again.";
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
+  /* ============================================================
+     AI Insights — same rule-based, real-numbers-only pattern as
+     overview.html's renderInsights (no LLM call, nothing invented).
+     ============================================================ */
+
+  function renderAppliedInsights() {
+    const insights = [];
+    const all = appliedRecords;
+
+    // 1. Week-over-week applications trend.
+    const weekPop = appliedPeriodOverPeriod(all, () => true, "week");
+    if (weekPop.deltaPct === null) {
+      insights.push(
+        weekPop.current > 0
+          ? { tone: "green", icon: "trending-up", html: `<strong>${weekPop.current}</strong> application${weekPop.current === 1 ? "" : "s"} this week — no prior week yet to compare against.` }
+          : { tone: "slate", icon: "minus", html: "No applications logged this week yet." }
+      );
+    } else if (weekPop.direction === "up") {
+      insights.push({ tone: "green", icon: "trending-up", html: `Applications are up <strong>${weekPop.deltaPct}%</strong> vs last week (${weekPop.current} vs ${weekPop.previous}).` });
+    } else if (weekPop.direction === "down") {
+      insights.push({ tone: "red", icon: "trending-down", html: `Applications are down <strong>${Math.abs(weekPop.deltaPct)}%</strong> vs last week (${weekPop.current} vs ${weekPop.previous}).` });
+    } else {
+      insights.push({ tone: "slate", icon: "minus", html: `Applications this week match last week — <strong>${weekPop.current}</strong> so far.` });
+    }
+
+    // 2. Top vertical this month.
+    const { start, end } = DataStore.goalPeriodRange("monthly");
+    const inMonth = all.filter((r) => r.submittedAt && r.submittedAt >= start && r.submittedAt < end);
+    const monthlyStats = DataStore.VERTICALS.map((v) => ({ label: v.label, count: inMonth.filter((r) => DataStore.verticalsOf(r).includes(v.key)).length }));
+    const topVertical = monthlyStats.slice().sort((a, b) => b.count - a.count)[0];
+    if (topVertical && topVertical.count > 0) {
+      insights.push({ tone: "green", icon: "target", html: `<strong>${topVertical.label}</strong> leads applications this month with <strong>${topVertical.count}</strong>.` });
+    }
+
+    // 3. Gender split, if the data has it.
+    const withGender = all.filter((r) => r.gender);
+    if (withGender.length) {
+      const counts = {};
+      withGender.forEach((r) => (counts[r.gender] = (counts[r.gender] || 0) + 1));
+      const [topGender, topGenderCount] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      const pct = Math.round((topGenderCount / withGender.length) * 100);
+      insights.push({ tone: "slate", icon: "users", html: `<strong>${pct}%</strong> of applicants are ${topGender} (${topGenderCount} of ${withGender.length}).` });
+    }
+
+    const container = document.getElementById("appliedInsights");
+    if (!insights.length) {
+      container.innerHTML = `<p class="ov-empty-hint">Nothing to report yet.</p>`;
+      return;
+    }
+    container.innerHTML = insights
+      .slice(0, 3)
+      .map(
+        (i) => `
+        <div class="ov-insight-row ov-insight-tone-${i.tone}">
+          <span class="ov-insight-icon">${Icons.svg(i.icon, { size: 15 })}</span>
+          <span class="ov-insight-text">${i.html}</span>
+        </div>`
+      )
+      .join("");
+  }
+
+  /* ============================================================
+     AI Assistant — rule-based Q&A over the real Applied numbers, same
+     house pattern as leads.html's AI Assistant (see its comment for the
+     honest note: no LLM call, nothing invented, just real numbers
+     phrased in plain language).
+     ============================================================ */
+
+  const APPLIED_AI_SUGGESTIONS = [
+    "How many applicants total?",
+    "Top vertical this month?",
+    "Applicants this week?",
+    "Gender split?",
+    "Top district?",
+  ];
+
+  function appliedAiAnswer(question) {
+    const records = appliedRecords;
+    const q = question.toLowerCase();
+
+    if (/gender|split|male|female/.test(q)) {
+      const withGender = records.filter((r) => r.gender);
+      if (!withGender.length) return "No gender data on file yet.";
+      const counts = {};
+      withGender.forEach((r) => (counts[r.gender] = (counts[r.gender] || 0) + 1));
+      const parts = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([g, c]) => `${g}: <strong>${c}</strong> (${Math.round((c / withGender.length) * 100)}%)`);
+      return `Of ${withGender.length} applicants with gender on file — ${parts.join(", ")}.`;
+    }
+    if (/top vertical|which vertical|best vertical|most applicants/.test(q)) {
+      const { start, end } = DataStore.goalPeriodRange("monthly");
+      const inMonth = records.filter((r) => r.submittedAt && r.submittedAt >= start && r.submittedAt < end);
+      const stats = DataStore.VERTICALS.map((v) => ({ label: v.label, count: inMonth.filter((r) => DataStore.verticalsOf(r).includes(v.key)).length }));
+      const top = stats.slice().sort((a, b) => b.count - a.count)[0];
+      if (!top || top.count === 0) return "No applications logged yet this month to rank verticals by.";
+      return `<strong>${top.label}</strong> leads applications this month with <strong>${top.count}</strong>.`;
+    }
+    if (/top district|which district|most popular district/.test(q)) {
+      const withDistrict = records.filter((r) => r.district);
+      if (!withDistrict.length) return "No district data on file yet.";
+      const counts = {};
+      withDistrict.forEach((r) => {
+        const d = AreaSettings.canonicalize(r.district);
+        if (d) counts[d] = (counts[d] || 0) + 1;
+      });
+      const [topDistrict, topCount] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      return `<strong>${topDistrict}</strong> has the most applicants (${topCount}).`;
+    }
+    if (/this week/.test(q)) {
+      const { startOfWeek } = DataStore._dateHelpers;
+      const start = startOfWeek(new Date());
+      const count = records.filter((r) => r.submittedAt && r.submittedAt >= start).length;
+      return `<strong>${count}</strong> applicant${count === 1 ? " has" : "s have"} applied this week so far.`;
+    }
+    if (/this month/.test(q)) {
+      const { startOfMonth } = DataStore._dateHelpers;
+      const start = startOfMonth(new Date());
+      const count = records.filter((r) => r.submittedAt && r.submittedAt >= start).length;
+      return `<strong>${count}</strong> applicant${count === 1 ? " has" : "s have"} applied this month so far.`;
+    }
+    if (/legacy|old (survey|form)/.test(q)) {
+      const legacyCount = records.filter((r) => r.legacy).length;
+      return `<strong>${legacyCount}</strong> applicants came from the old survey (no longer live), out of ${records.length} total.`;
+    }
+    if (/how many|total applicant|applicants total/.test(q)) {
+      return `There are <strong>${records.length}</strong> applicants on file in total.`;
+    }
+    return `I can answer questions about totals, this week/month, top vertical, top district, gender split, and the old-survey applicants — try one of the suggestions below.`;
+  }
+
+  function appliedAppendAiMessage(text, from) {
+    const log = document.getElementById("appliedAiLog");
+    log.insertAdjacentHTML("beforeend", `<div class="ai-chat-msg from-${from}">${text}</div>`);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function wireAiAssistant() {
+    appliedAppendAiMessage("Ask me about your applicants — totals, top verticals or districts, gender split, or the old-survey group.", "ai");
+    document.getElementById("appliedAiSuggestions").innerHTML = APPLIED_AI_SUGGESTIONS.map((s) => `<button type="button" class="ai-chat-chip">${s}</button>`).join("");
+
+    const form = document.getElementById("appliedAiForm");
+    const input = document.getElementById("appliedAiInput");
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (!q) return;
+      appliedAppendAiMessage(q, "user");
+      input.value = "";
+      setTimeout(() => appliedAppendAiMessage(appliedAiAnswer(q), "ai"), 150);
+    });
+
+    document.getElementById("appliedAiSuggestions").addEventListener("click", (e) => {
+      const chip = e.target.closest(".ai-chat-chip");
+      if (!chip) return;
+      appliedAppendAiMessage(chip.textContent, "user");
+      setTimeout(() => appliedAppendAiMessage(appliedAiAnswer(chip.textContent), "ai"), 150);
+    });
+  }
+
+  /* ============================================================
+     Bootstrap — runs last, same pattern as leads.html/calls.html.
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Applied] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "applied", root: ".." });
+    initAppliedPage();
+  }
+</script>
+
+</body>
+</html>

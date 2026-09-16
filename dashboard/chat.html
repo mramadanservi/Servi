@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — General Chatroom</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <section class="ov-card profile-hero-card">
+    <div class="profile-hero-avatar gc-logo-avatar" id="gcHeaderAvatar"></div>
+    <div>
+      <div class="profile-hero-name">Servi General Chatroom</div>
+      <div class="profile-hero-sub" id="gcHeaderSub">Everyone on the team can see these messages.</div>
+    </div>
+  </section>
+
+  <div id="gcError" class="ov-card" hidden></div>
+
+  <div class="gc-layout" id="gcLayout" hidden>
+    <section class="gc-main">
+      <div class="gc-scroll" id="gcScroll">
+        <div class="ov-skeleton" style="height:60px; margin:20px;"></div>
+      </div>
+      <div class="gc-typing" id="gcTyping" hidden></div>
+      <div class="gc-input-bar">
+        <form id="gcForm">
+          <div class="gc-input-row">
+            <textarea class="gc-input" id="gcInput" placeholder="Message the team…" rows="1"></textarea>
+            <button type="submit" class="gc-send-btn" id="gcSendBtn" aria-label="Send"></button>
+          </div>
+        </form>
+        <p class="gc-hint" id="gcHint">Refreshes automatically — no need to reload.</p>
+      </div>
+    </section>
+
+    <section class="ov-card gc-members-card">
+      <div class="ov-card-header">
+        <h2>Members</h2>
+        <span class="ov-hint" id="gcMembersHint"></span>
+      </div>
+      <div class="gc-members-list" id="gcMembersList">
+        <div class="ov-skeleton" style="height:70px;"></div>
+        <div class="ov-skeleton" style="height:70px;"></div>
+        <div class="ov-skeleton" style="height:70px;"></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     General Chatroom
+     ------------------------------------------------------------
+     Backed by the "General_ChatRoom" tab in the same spreadsheet as
+     the Servi_Team roster (see ChatConfig in sheetsConfig.js) — every
+     send appends a row there, and this page polls it to stay "live".
+     A separate "Typing" tab (same spreadsheet) carries a lightweight
+     presence signal for the "X is typing…" indicator.
+
+     Judgment calls, all confirmed with the user before building:
+       - Poll interval is 3 seconds, not literally every 1 second —
+         Google's Sheets API has a ~60 read-requests/minute/user
+         default quota, and 1/sec would sit right at that ceiling
+         (especially with other tabs' widgets also polling). 3s still
+         reads as "live" to a person while leaving real headroom.
+         fetchChatAndTyping() uses Sheets' batchGet to fetch both the
+         messages and the typing range in ONE request per cycle, not
+         two, to use that quota even more conservatively.
+       - File/image sharing is explicitly OUT of scope for this build
+         (the user said to skip it) — there is no attach button here.
+       - The "delete messages every 6 hours" behavior is NOT done by
+         this page — Google Sheets has no built-in timer, so it needs
+         a Google Apps Script time-driven trigger installed once on
+         the spreadsheet (given to the user separately, outside this
+         codebase, since it doesn't run as part of this dashboard).
+         Until that's installed, old messages simply won't be purged.
+       - The Typing tab doesn't exist in the sheet yet (needs a one-
+         time manual add, same pattern as Birthdate/Nationality on the
+         Profile page) — until it is, typing indicators just stay off
+         (fetchChatAndTyping()'s typingTabMissing flag) rather than
+         erroring the whole page.
+       - KB (Khalil Badran) is identified the same way team.html does
+         (name or "co-founder" position match) and gets a visually
+         distinct gold bubble so his messages stand out, per the
+         user's request.
+       - "Sent" is optimistic: your own message renders immediately
+         instead of waiting for the next poll, then gets reconciled
+         (not double-rendered) once the poll confirms it landed in the
+         sheet — see pendingLocal below.
+     ============================================================ */
+
+  const POLL_INTERVAL_MS = 3000;
+  const TYPING_STALE_MS = 4000; // treat a typing row older than this as "stopped typing"
+  const TYPING_WRITE_COOLDOWN_MS = 2500; // don't hammer the sheet on every keystroke
+
+  const chatState = {
+    me: null, // { fullName, isKB } — resolved from the roster by signed-in email
+    roster: [],
+    messages: [],
+    typingRows: [],
+    myTypingRow: null,
+    typingTabMissing: false,
+    pendingLocal: [], // [{ localId, sentBy, message, sentAt }] — optimistic, not yet confirmed by a poll
+    pollTimer: null,
+    typingCooldownUntil: 0,
+    everLoadedMessages: false, // true after the first successful poll — lets us tell "still loading" apart from "genuinely empty"
+    consecutivePollFailures: 0,
+  };
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  }
+
+  // Accepts a real http(s) URL OR a data: image URI — the latter is how a
+  // photo uploaded via Settings > Profile Settings gets stored (Sheets
+  // cells can't hold binary/files, so an uploaded photo is compressed
+  // client-side into a small data: URI string instead — see settings.html).
+  function looksLikeUrl(s) {
+    return /^(https?:\/\/|data:image\/)/i.test(String(s || "").trim());
+  }
+
+  function initialsFor(member) {
+    const f = (member.firstName || "").trim();
+    const l = (member.lastName || "").trim();
+    return ((f[0] || "") + (l[0] || "")).toUpperCase() || "?";
+  }
+
+  // Same rule as team.html's isKB — name match OR "co-founder" in position.
+  function isKB(member) {
+    const first = (member.firstName || "").trim().toLowerCase();
+    const last = (member.lastName || "").trim().toLowerCase();
+    const position = (member.position || "").trim().toLowerCase();
+    return (first === "khalil" && last === "badran") || /co.?founder/.test(position);
+  }
+
+  function isKBName(name) {
+    const member = chatState.roster.find((m) => m.fullName === name);
+    if (member) return isKB(member);
+    return /khalil\s+badran/i.test(String(name || ""));
+  }
+
+  function initProfileLogo() {
+    function update() {
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      document.getElementById("gcHeaderAvatar").innerHTML = `<img src="../assets/images/${isDark ? "icon-dark" : "icon-light"}.png" alt="Servi" />`;
+    }
+    update();
+    new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+
+  function initChatPage() {
+    document.querySelector(".gc-send-btn").innerHTML = Icons.svg("chevron-right", { size: 19 });
+    initProfileLogo();
+    wireComposer();
+    loadChatPage();
+  }
+
+  async function loadChatPage() {
+    const [rosterRes] = await Promise.allSettled([SheetsClient.fetchTeamRoster()]);
+
+    if (rosterRes.status !== "fulfilled") {
+      renderLoadError(rosterRes.reason);
+      return;
+    }
+
+    chatState.roster = rosterRes.value.members;
+    renderMembers(chatState.roster);
+
+    const account = Auth.getAccount() || {};
+    const myEmail = String(account.email || "").trim().toLowerCase();
+    const matched = chatState.roster.find((m) => m.email && m.email.trim().toLowerCase() === myEmail);
+    chatState.me = { fullName: matched ? matched.fullName : (account.name || account.email || "You") };
+    if (!matched) {
+      document.getElementById("gcHeaderSub").textContent =
+        "Everyone on the team can see these messages. (Your account isn't in the Servi_Team sheet yet, so you're posting as “" + chatState.me.fullName + "” — ask an admin to add you.)";
+    }
+
+    document.getElementById("gcError").hidden = true;
+    document.getElementById("gcLayout").hidden = false;
+
+    await pollOnce();
+    schedulePoll();
+  }
+
+  function renderLoadError(err) {
+    const needsScope = err && err.code === "NEEDS_SHEETS_SCOPE";
+    document.getElementById("gcLayout").hidden = true;
+    const box = document.getElementById("gcError");
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="ov-reconnect">
+        <p>${needsScope ? "This dashboard needs permission to read and post to the General Chatroom sheet." : "Couldn't load the General Chatroom right now."}</p>
+        ${!needsScope && err && err.message ? `<p class="ov-reconnect-detail">${escapeHtml(err.message)}</p>` : ""}
+        <button type="button" id="gcReconnectBtn">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+      </div>`;
+    document.getElementById("gcReconnectBtn").addEventListener("click", async (e) => {
+      if (!needsScope) { loadChatPage(); return; }
+      e.target.disabled = true;
+      e.target.textContent = "Connecting…";
+      try {
+        await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+        loadChatPage();
+      } catch (err2) {
+        e.target.disabled = false;
+        e.target.textContent = "Connect Google Sheets";
+        e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${escapeHtml(err2.message)}</p>`);
+      }
+    });
+  }
+
+  /* ============================================================
+     Members panel — reuses team.html's exact card styling
+     (.team-member-card/.team-member-avatar/...) so it looks
+     identical, trimmed down to just name + email + initials
+     "credential" badge, per the user's explicit request.
+     ============================================================ */
+
+  function memberCardHtml(member) {
+    const founder = isKB(member);
+    const avatar = looksLikeUrl(member.image)
+      ? `<img src="${escapeHtml(member.image)}" alt="" />`
+      : (founder ? Icons.svg("crown", { size: 20 }) : initialsFor(member));
+    return `
+      <div class="team-member-card${founder ? " is-founder" : ""}">
+        <div class="team-member-avatar">${avatar}</div>
+        <div class="team-member-info">
+          <div class="team-member-name-row">
+            <span class="team-member-name">${escapeHtml(member.fullName)}</span>
+            ${founder ? `<span class="team-founder-badge">${Icons.svg("crown", { size: 11 })}Co-Founder</span>` : ""}
+          </div>
+          <div class="team-member-contact">
+            ${member.email ? `<span>${Icons.svg("inbox", { size: 12 })}${escapeHtml(member.email)}</span>` : ""}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderMembers(members) {
+    const list = document.getElementById("gcMembersList");
+    const hint = document.getElementById("gcMembersHint");
+    if (!members.length) {
+      hint.textContent = "";
+      list.innerHTML = `<div class="team-member-empty">No team members found in the Servi_Team sheet yet.</div>`;
+      return;
+    }
+    hint.textContent = `${members.length} member${members.length === 1 ? "" : "s"}`;
+    const sorted = members.slice().sort((a, b) => {
+      const aKB = isKB(a), bKB = isKB(b);
+      if (aKB && !bKB) return -1;
+      if (bKB && !aKB) return 1;
+      return 0;
+    });
+    list.innerHTML = sorted.map(memberCardHtml).join("");
+  }
+
+  /* ============================================================
+     Composer — send + typing presence
+     ============================================================ */
+
+  function wireComposer() {
+    const form = document.getElementById("gcForm");
+    const input = document.getElementById("gcInput");
+
+    input.addEventListener("input", () => {
+      input.style.height = "auto";
+      input.style.height = Math.min(input.scrollHeight, 160) + "px";
+      maybeSendTyping();
+    });
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      input.style.height = "auto";
+      sendMessage(text);
+    });
+  }
+
+  function maybeSendTyping() {
+    if (chatState.typingTabMissing) return;
+    if (Date.now() < chatState.typingCooldownUntil) return;
+    chatState.typingCooldownUntil = Date.now() + TYPING_WRITE_COOLDOWN_MS;
+    SheetsClient.upsertTyping(chatState.me.fullName, chatState.myTypingRow);
+  }
+
+  async function sendMessage(text) {
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    chatState.pendingLocal.push({ localId, sentBy: chatState.me.fullName, message: text, sentAt: new Date() });
+    renderMessages();
+
+    const btn = document.getElementById("gcSendBtn");
+    btn.disabled = true;
+    try {
+      await SheetsClient.sendChatMessage(chatState.me.fullName, text);
+    } catch (err) {
+      chatState.pendingLocal = chatState.pendingLocal.filter((p) => p.localId !== localId);
+      renderMessages();
+      const hint = document.getElementById("gcHint");
+      hint.textContent = err.code === "NEEDS_SHEETS_SCOPE"
+        ? "Couldn't send — Google Sheets access needs to be reconnected (Settings)."
+        : "Couldn't send that message — it wasn't saved. Try again.";
+    } finally {
+      btn.disabled = false;
+    }
+    // Poll right away rather than waiting for the next tick, so the
+    // sender sees their own message reconciled quickly too.
+    pollOnce();
+  }
+
+  /* ============================================================
+     Poll loop — one combined batchGet per cycle for messages + typing.
+     ============================================================ */
+
+  function schedulePoll() {
+    if (chatState.pollTimer) clearTimeout(chatState.pollTimer);
+    chatState.pollTimer = setTimeout(async () => {
+      await pollOnce();
+      schedulePoll();
+    }, POLL_INTERVAL_MS);
+  }
+
+  async function pollOnce() {
+    try {
+      const { messages, typing, typingTabMissing } = await SheetsClient.fetchChatAndTyping();
+      chatState.messages = messages;
+      chatState.typingRows = typing;
+      chatState.typingTabMissing = typingTabMissing;
+      chatState.everLoadedMessages = true;
+      chatState.consecutivePollFailures = 0;
+
+      const mine = typing.find((t) => t.name === chatState.me.fullName);
+      chatState.myTypingRow = mine ? mine._row : null;
+
+      // Reconcile optimistic sends: once a real row with the same
+      // sender+text shows up (sent at/after we queued it locally), drop
+      // the local placeholder so it isn't rendered twice.
+      if (chatState.pendingLocal.length) {
+        chatState.pendingLocal = chatState.pendingLocal.filter((p) => {
+          const confirmed = messages.some((m) => m.sentBy === p.sentBy && m.message === p.message && m.dateSent && m.dateSent.getTime() >= p.sentAt.getTime() - 5000);
+          return !confirmed;
+        });
+      }
+
+      document.getElementById("gcHint").textContent = chatState.typingTabMissing
+        ? "Refreshes automatically. Typing indicators need a one-time sheet setup — see Settings notes."
+        : "Refreshes automatically — no need to reload.";
+
+      renderMessages();
+      renderTyping();
+    } catch (err) {
+      // A single failed poll (network hiccup, brief rate limit) shouldn't
+      // blank the chat — just try again next cycle. But if polls keep
+      // failing, staying silent is its own bug: the page is left stuck on
+      // the initial loading skeleton forever with no clue why (this is
+      // exactly what was reported — messages never appearing for one
+      // teammate). After 2 misses in a row, say so in the hint line
+      // instead of pretending everything's fine.
+      console.warn("[Chat] poll failed:", err);
+      chatState.consecutivePollFailures += 1;
+      if (chatState.consecutivePollFailures >= 2) {
+        document.getElementById("gcHint").textContent =
+          `Couldn't refresh the chat (${err && err.message ? err.message : "unknown error"}) — still retrying automatically…`;
+        if (!chatState.everLoadedMessages) renderMessages(); // replace the static skeleton with a real "still trying" state
+      }
+    }
+  }
+
+  /* ============================================================
+     Rendering
+     ============================================================ */
+
+  function isNearBottom(el) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }
+
+  function messageRowHtml(sentBy, message, dateSent, mine) {
+    const kb = isKBName(sentBy);
+    const tone = mine ? "mine" : kb ? "kb" : "other";
+    const time = dateSent ? dateSent.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+    return `
+      <div class="gc-msg ${tone}">
+        <div class="gc-msg-inner">
+          ${mine ? "" : `<div class="gc-msg-meta">${kb ? Icons.svg("crown", { size: 11 }) : ""}${escapeHtml(sentBy || "Unknown")}${time ? ` · ${time}` : ""}</div>`}
+          <div class="gc-bubble">${escapeHtml(message)}</div>
+          ${mine && time ? `<div class="gc-msg-meta">${time}</div>` : ""}
+        </div>
+      </div>`;
+  }
+
+  function renderMessages() {
+    const scroll = document.getElementById("gcScroll");
+    const wasNearBottom = scroll.dataset.rendered ? isNearBottom(scroll) : true;
+
+    const rows = chatState.messages.map((m) => messageRowHtml(m.sentBy, m.message, m.dateSent, m.sentBy === chatState.me.fullName));
+    const pendingRows = chatState.pendingLocal.map((p) => messageRowHtml(p.sentBy, p.message, p.sentAt, true));
+    const allRows = rows.concat(pendingRows);
+
+    if (allRows.length) {
+      scroll.innerHTML = allRows.join("");
+    } else if (!chatState.everLoadedMessages) {
+      // Distinct from "genuinely empty" below — messages haven't loaded
+      // successfully even once yet (still retrying after a poll failure).
+      scroll.innerHTML = `<div class="gc-empty">Couldn't load messages yet — retrying automatically. Check your connection if this doesn't clear up.</div>`;
+    } else {
+      scroll.innerHTML = `<div class="gc-empty">No messages yet — say hello to the team.</div>`;
+    }
+    scroll.dataset.rendered = "1";
+
+    if (wasNearBottom) scroll.scrollTop = scroll.scrollHeight;
+  }
+
+  function renderTyping() {
+    const el = document.getElementById("gcTyping");
+    const now = Date.now();
+    const names = chatState.typingRows
+      .filter((t) => t.name !== chatState.me.fullName && t.lastTypedAt && now - t.lastTypedAt.getTime() < TYPING_STALE_MS)
+      .map((t) => t.name);
+
+    if (!names.length) {
+      el.hidden = true;
+      return;
+    }
+    let text;
+    if (names.length === 1) text = `${names[0]} is typing…`;
+    else if (names.length === 2) text = `${names[0]} and ${names[1]} are typing…`;
+    else text = `${names[0]}, ${names[1]} and ${names.length - 2} other${names.length - 2 === 1 ? "" : "s"} are typing…`;
+    el.textContent = text;
+    el.hidden = false;
+  }
+
+  /* ============================================================
+     Bootstrap
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Chat] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "chat", root: ".." });
+    initChatPage();
+  }
+</script>
+
+</body>
+</html>

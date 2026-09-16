@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Settings</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for the Connections section's Reconnect button (interactive
+     Google consent) and for Auth.ensureToken()'s silent renewal. -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <h1 class="page-heading" data-i18n="Settings">Settings</h1>
+  <p class="page-subheading">Profile, security, appearance, notifications, AI, and more.</p>
+
+  <div class="settings-shell">
+    <nav class="settings-shell-nav" id="settingsNav"></nav>
+
+    <div class="settings-shell-panel" id="settingsPanel">
+
+      <!-- ============ General > Profile Settings ============ -->
+      <section class="settings-shell-section" data-section="profile">
+        <div class="settings-section-intro">
+          <h2 data-i18n="Profile Settings">Profile Settings</h2>
+          <p>Your name, position, and contact info — saved straight to the Servi_Team sheet, so it updates everywhere this dashboard shows you (Team page, your Profile page, chat).</p>
+        </div>
+
+        <div id="settingsProfileNotFound" class="ov-card" hidden></div>
+
+        <div id="settingsProfileBody" hidden>
+          <div class="ov-card">
+            <div class="settings-photo-row">
+              <div class="settings-photo-avatar" id="settingsPhotoAvatar"></div>
+              <div class="settings-photo-actions">
+                <button type="button" id="settingsPhotoUploadBtn"></button>
+                <input type="file" id="settingsPhotoInput" accept="image/png,image/jpeg,image/webp" hidden />
+                <button type="button" id="settingsPhotoDeleteBtn" class="danger"></button>
+              </div>
+              <p class="settings-photo-hint">JPG, PNG, or WebP. There's no separate file/photo storage connected here — your photo is shrunk down and saved directly as the Servi_Team sheet's Image column, so a simple, close-up photo will come through a lot clearer than a large, detailed one.</p>
+            </div>
+          </div>
+
+          <div class="ov-card">
+            <div class="settings-form-grid">
+              <div class="settings-field">
+                <label for="settingsFirstName">First Name</label>
+                <input type="text" id="settingsFirstName" autocomplete="given-name" />
+              </div>
+              <div class="settings-field">
+                <label for="settingsLastName">Last Name</label>
+                <input type="text" id="settingsLastName" autocomplete="family-name" />
+              </div>
+              <div class="settings-field">
+                <label for="settingsPosition">Position</label>
+                <input type="text" id="settingsPosition" />
+              </div>
+              <div class="settings-field">
+                <label for="settingsEmail">Email</label>
+                <input type="email" id="settingsEmail" autocomplete="email" />
+              </div>
+              <div class="settings-field" style="grid-column: 1 / -1;">
+                <label for="settingsPhoneLocal">Phone Number</label>
+                <div class="settings-phone-row">
+                  <div class="settings-phone-country" id="settingsPhoneCountry"></div>
+                  <input type="tel" id="settingsPhoneLocal" placeholder="70 123 456" autocomplete="tel-national" />
+                </div>
+              </div>
+            </div>
+            <p class="settings-photo-hint" style="margin-top:12px;">Changing your email here also changes which Servi_Team row future logins match to you — make sure it's still an email you'll keep signing in with.</p>
+            <div class="settings-save-row" style="margin-top:14px;">
+              <button type="button" class="btn-save" id="settingsProfileSaveBtn">Save changes</button>
+              <span class="settings-save-status" id="settingsProfileStatus"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ General > Security ============ -->
+      <section class="settings-shell-section" data-section="security">
+        <div class="settings-section-intro">
+          <h2 data-i18n="Security">Security</h2>
+          <p>What this dashboard can access on your Google account, plus session and sign-out controls.</p>
+        </div>
+
+        <section class="ov-card settings-connections-card">
+          <div class="ov-card-header">
+            <h2>Connections</h2>
+            <span class="ov-hint">What this dashboard can read/write on your Google account</span>
+          </div>
+          <div class="settings-account-row" id="settingsAccountRow"></div>
+          <div class="settings-conn-list" id="settingsConnList"></div>
+          <div class="settings-conn-actions">
+            <button type="button" id="settingsReconnectBtn">Reconnect Google Account</button>
+            <span class="ov-hint" id="settingsReconnectHint"></span>
+          </div>
+          <div id="settingsReconnectMsgWrap"></div>
+        </section>
+
+        <div class="ov-card">
+          <div class="ov-card-header"><h2>Session</h2></div>
+          <div class="settings-security-row">
+            <div>
+              <div class="settings-security-label">Last accessed</div>
+              <div class="settings-security-sub" id="settingsLastAccessed">—</div>
+            </div>
+          </div>
+          <div class="settings-security-row">
+            <div>
+              <div class="settings-security-label">Auto-Logout Inactive Sessions</div>
+              <div class="settings-security-sub">Sign out automatically after a period with no activity in this browser.</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <input type="number" min="1" max="240" class="settings-minutes-input" id="settingsAutoLogoutMinutes" />
+              <span class="settings-security-sub">min</span>
+              <label class="settings-toggle">
+                <input type="checkbox" id="settingsAutoLogoutToggle" />
+                <span class="settings-toggle-track"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="ov-card">
+          <div class="ov-card-header"><h2>Active Sessions</h2></div>
+          <div id="settingsSessionsList"></div>
+          <p class="settings-session-note">This dashboard has no backend yet that can see OTHER devices/browsers you're signed into — so only this one real session is shown. Built so a future multi-device backend can just add more rows here, e.g. once a companion mobile app exists.</p>
+        </div>
+      </section>
+
+      <!-- ============ General > Date & Time ============ -->
+      <section class="settings-shell-section" data-section="datetime">
+        <div class="settings-section-intro">
+          <h2 data-i18n="Date &amp; Time">Date &amp; Time</h2>
+          <p>How dates and times will be displayed across the dashboard. Foundation only for now — pages don't yet reformat their own dates/times using this (each currently uses the browser's own locale formatting); saved here and ready to wire in as that becomes a priority.</p>
+        </div>
+        <div class="ov-card">
+          <div class="settings-form-grid">
+            <div class="settings-field">
+              <label for="settingsDateFormat">Date format</label>
+              <select id="settingsDateFormat">
+                <option value="dmy">DD/MM/YYYY</option>
+                <option value="mdy">MM/DD/YYYY</option>
+                <option value="iso">YYYY-MM-DD</option>
+              </select>
+            </div>
+            <div class="settings-field">
+              <label for="settingsTimeFormat">Time format</label>
+              <select id="settingsTimeFormat">
+                <option value="12">12-hour (2:30 PM)</option>
+                <option value="24">24-hour (14:30)</option>
+              </select>
+            </div>
+            <div class="settings-field" style="grid-column: 1 / -1;">
+              <label for="settingsTimezone">Time zone</label>
+              <select id="settingsTimezone">
+                <option value="Asia/Beirut">Beirut (default)</option>
+                <option value="UTC">UTC</option>
+                <option value="Europe/London">London</option>
+                <option value="Europe/Paris">Paris</option>
+                <option value="Asia/Dubai">Dubai</option>
+                <option value="America/New_York">New York</option>
+                <option value="America/Los_Angeles">Los Angeles</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-save-row" style="margin-top:14px;">
+            <span class="settings-save-status ok" id="settingsDateTimeStatus"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Goals & Progress ============ -->
+      <section class="settings-shell-section" data-section="goals">
+        <div class="settings-section-intro">
+          <h2>Goals &amp; Progress</h2>
+          <p>Set your own targets — "call 20 tutors this week", "10 applications from Beirut" — tracked live against your real Leads/Calls numbers. The 4 original team goals are included to start; edit or delete any of them, and add as many of your own as you want.</p>
+        </div>
+
+        <div class="ov-card" id="settingsGoalsFormCard" hidden>
+          <div class="ov-card-header"><h2 id="settingsGoalFormTitle">Add a Goal</h2></div>
+          <div class="settings-form-grid">
+            <div class="settings-field" style="grid-column: 1 / -1;">
+              <label for="settingsGoalLabel">Goal (in your own words)</label>
+              <input type="text" id="settingsGoalLabel" placeholder="e.g. Call 20 tutors this week" />
+            </div>
+            <div class="settings-field">
+              <label for="settingsGoalMetric">Count</label>
+              <select id="settingsGoalMetric"></select>
+            </div>
+            <div class="settings-field">
+              <label for="settingsGoalPeriod">Time window</label>
+              <select id="settingsGoalPeriod"></select>
+            </div>
+            <div class="settings-field">
+              <label for="settingsGoalDimension">Narrow to</label>
+              <select id="settingsGoalDimension"></select>
+            </div>
+            <div class="settings-field" id="settingsGoalValueField" hidden>
+              <label for="settingsGoalValue">Which one</label>
+              <select id="settingsGoalValueSelect" hidden></select>
+              <input type="text" id="settingsGoalValueText" hidden placeholder="e.g. Beirut" />
+            </div>
+            <div class="settings-field">
+              <label for="settingsGoalTarget">Target number</label>
+              <input type="number" id="settingsGoalTarget" min="1" step="1" placeholder="e.g. 20" />
+            </div>
+          </div>
+          <div class="settings-save-row" style="margin-top:14px; justify-content: flex-start; gap: 10px;">
+            <button type="button" class="settings-reset-btn" id="settingsGoalSaveBtn">Save Goal</button>
+            <button type="button" class="link-btn" id="settingsGoalCancelBtn">Cancel</button>
+            <span class="settings-save-status" id="settingsGoalFormStatus"></span>
+          </div>
+        </div>
+
+        <div class="ov-card">
+          <div class="ov-card-header">
+            <h2>Your Goals</h2>
+            <button type="button" class="settings-reset-btn" id="settingsAddGoalBtn">+ Add Goal</button>
+          </div>
+          <p class="ov-hint" id="settingsGoalsDataHint">Loading your real numbers…</p>
+          <div id="settingsGoalsList"></div>
+        </div>
+      </section>
+
+      <!-- ============ Preferences > Appearance ============ -->
+      <section class="settings-shell-section" data-section="appearance">
+        <div class="settings-section-intro">
+          <h2 data-i18n="Appearance">Appearance</h2>
+          <p>Saved to this browser and restored automatically every time you sign back in.</p>
+        </div>
+
+        <div class="ov-card">
+          <div class="ov-card-header"><h2 data-i18n="Theme">Theme</h2></div>
+          <div class="settings-preview-row" id="settingsThemeRow"></div>
+        </div>
+
+        <div class="ov-card">
+          <div class="ov-card-header">
+            <h2>Color Palette</h2>
+            <span class="ov-hint">Servi Orange is the default look</span>
+          </div>
+          <div class="settings-preview-row" id="settingsPaletteRow"></div>
+        </div>
+
+        <div class="ov-card">
+          <div class="ov-card-header"><h2>Glass Effect</h2></div>
+          <div class="settings-preview-row" id="settingsGlassRow"></div>
+        </div>
+
+        <div class="ov-card">
+          <div class="ov-card-header">
+            <h2>Chart Style</h2>
+            <span class="ov-hint">Applies to every trend chart on the dashboard (Calls Over Time, Applied Over Time)</span>
+          </div>
+          <div class="settings-preview-row settings-chart-row" id="settingsChartRow"></div>
+        </div>
+
+        <div class="ov-card">
+          <div class="settings-reset-row">
+            <button type="button" class="settings-reset-btn" id="settingsResetAppearanceBtn">Reset to default Servi appearance</button>
+            <span class="settings-save-status" id="settingsResetStatus"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Preferences > Notifications ============ -->
+      <section class="settings-shell-section" data-section="notifications">
+        <div class="settings-section-intro">
+          <h2 data-i18n="Notifications">Notifications</h2>
+          <p>Mute what you don't want to be alerted about — this only affects popups/sounds/the bell badge in this browser.</p>
+        </div>
+        <div class="ov-card" id="settingsNotifList"></div>
+      </section>
+
+      <!-- ============ Preferences > Language ============ -->
+      <section class="settings-shell-section" data-section="language">
+        <div class="settings-section-intro">
+          <h2 data-i18n="Language">Language</h2>
+          <p>Saved to this browser. Foundation only for now — the dashboard's text is still English everywhere regardless of this choice; full French translation is a later phase.</p>
+        </div>
+        <div class="ov-card">
+          <div class="settings-lang-row" id="settingsLangRow"></div>
+        </div>
+      </section>
+
+      <!-- ============ AI > AI Settings ============ -->
+      <section class="settings-shell-section" data-section="ai">
+        <div class="settings-section-intro">
+          <h2>AI Settings</h2>
+          <p>Powers the AI Assistant tab — a real Gemini-API-backed assistant, not a rule-based one.</p>
+        </div>
+
+        <div class="ov-card">
+          <div class="ov-card-header"><h2>Model</h2></div>
+          <div class="settings-field" style="max-width:420px;">
+            <select id="settingsGeminiModelSelect"></select>
+          </div>
+          <p class="settings-ai-model-sync">Shared with the model picker on the AI Assistant page itself — changing it here changes it there too, live.</p>
+        </div>
+
+        <div class="ov-card">
+          <div class="ov-card-header">
+            <h2>API Key</h2>
+          </div>
+          <p class="settings-ai-model-note">The Gemini API key is no longer set from here — it's configured directly in the app's code (<code>shared/geminiConfig.js</code>) so it's not something end users edit. See that file for setup instructions if the AI Assistant shows "not configured yet."</p>
+        </div>
+
+        <div class="ov-card">
+          <div class="ov-card-header">
+            <h2>Suggested Queries</h2>
+            <span class="ov-hint">Shown as chips on a new AI Assistant chat</span>
+          </div>
+          <div class="settings-query-list" id="settingsQueryList"></div>
+          <button type="button" class="settings-query-add" id="settingsQueryAddBtn"></button>
+          <div class="settings-save-row" style="margin-top:12px;">
+            <button type="button" class="btn-save" id="settingsQuerySaveBtn">Save queries</button>
+            <button type="button" class="settings-reset-btn" id="settingsQueryResetBtn">Reset to defaults</button>
+            <span class="settings-save-status" id="settingsQueryStatus"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Others > Help & Support ============ -->
+      <section class="settings-shell-section" data-section="help">
+        <div class="settings-section-intro">
+          <h2 data-i18n="Help &amp; Support">Help &amp; Support</h2>
+          <p>Foundation for now — real documentation, FAQs, and a support contact will fill these in as they're written.</p>
+        </div>
+        <div class="ov-card">
+          <div class="settings-help-grid" id="settingsHelpGrid"></div>
+        </div>
+      </section>
+
+      <!-- ============ Others > About Us ============ -->
+      <section class="settings-shell-section" data-section="about">
+        <div class="settings-section-intro">
+          <h2 data-i18n="About Us">About Us</h2>
+        </div>
+        <div class="ov-card">
+          <div class="settings-about-hero">
+            <img src="../assets/images/icon-light.png" alt="" id="settingsAboutLogo" />
+            <div>
+              <div class="settings-about-name">Servi</div>
+              <div class="settings-about-version">Internal team dashboard</div>
+            </div>
+          </div>
+          <p style="font-size:13.5px; color:var(--text-muted); line-height:1.6; margin:0 0 14px;">
+            Servi is a digitally-vetted marketplace connecting families with qualified freelancers across
+            tutoring, coaching, music &amp; art instruction, home-based therapy, caregiving, babysitting,
+            nursing, beauty, and pet services. This dashboard is the internal tool the Servi team uses to
+            run recruitment, manage the team, and keep track of day-to-day work.
+          </p>
+          <div class="settings-about-list">
+            <div class="settings-about-row"><span>Company</span><span>Servi</span></div>
+            <div class="settings-about-row"><span>Dashboard</span><span>servi-unified-dashboard-v2</span></div>
+            <div class="settings-about-row"><span>Version</span><span>Internal build — not yet numbered/released</span></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/chartSettings.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/statusSettings.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/areaSettings.js"></script>
+<script src="../shared/goals.js"></script>
+<script src="../shared/geminiConfig.js"></script>
+<script src="../shared/phoneCountries.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     Settings page
+     ------------------------------------------------------------
+     One page, categorized left nav (General / Preferences / AI /
+     Others) + a right panel showing whichever section is selected —
+     plain show/hide of pre-rendered <section> blocks, no router
+     needed for a single page. The last section you had open is
+     remembered per-browser so reopening Settings lands back where
+     you left it.
+
+     Judgment call (flagged): the old "Connections" card (Google
+     scope status + Reconnect button) doesn't have an explicit home
+     in the requested structure — it's folded into Security here,
+     since "what this app can access on your Google account" reads
+     as a security/access concern. Functionality is unchanged from
+     before, just relocated.
+     ============================================================ */
+
+  const SETTINGS_GROUPS = [
+    { title: "General", items: [
+      { key: "profile", label: "Profile Settings", icon: "circle-user" },
+      { key: "security", label: "Security", icon: "shield" },
+      { key: "datetime", label: "Date & Time", icon: "clock" },
+    ]},
+    { title: "Goals", items: [
+      { key: "goals", label: "Goals & Progress", icon: "target" },
+    ]},
+    { title: "Preferences", items: [
+      { key: "appearance", label: "Appearance", icon: "palette" },
+      { key: "notifications", label: "Notifications", icon: "bell" },
+      { key: "language", label: "Language", icon: "globe" },
+    ]},
+    { title: "AI", items: [
+      { key: "ai", label: "AI Settings", icon: "sparkles" },
+    ]},
+    { title: "Others", items: [
+      { key: "help", label: "Help & Support", icon: "help-circle" },
+      { key: "about", label: "About Us", icon: "building-2" },
+    ]},
+  ];
+
+  const LAST_SECTION_KEY = "servi_v2_settings_last_section";
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  }
+
+  function initSettingsNav() {
+    const nav = document.getElementById("settingsNav");
+    nav.innerHTML = SETTINGS_GROUPS.map((group) => `
+      <div class="settings-shell-group">
+        <div class="settings-shell-group-title">${group.title}</div>
+        ${group.items.map((item) => `
+          <button type="button" class="settings-shell-item" data-section="${item.key}">
+            ${Icons.svg(item.icon, { size: 17 })}<span>${item.label}</span>
+          </button>`).join("")}
+      </div>`).join("");
+
+    function showSection(key) {
+      document.querySelectorAll(".settings-shell-section").forEach((el) => el.classList.toggle("active", el.dataset.section === key));
+      document.querySelectorAll(".settings-shell-item").forEach((el) => el.classList.toggle("active", el.dataset.section === key));
+      try { localStorage.setItem(LAST_SECTION_KEY, key); } catch (_) {}
+    }
+
+    nav.addEventListener("click", (e) => {
+      const btn = e.target.closest(".settings-shell-item");
+      if (btn) showSection(btn.dataset.section);
+    });
+
+    let initial = "profile";
+    try { initial = localStorage.getItem(LAST_SECTION_KEY) || "profile"; } catch (_) {}
+    // A direct link like "settings.html#goals" (used by Overview's "Manage
+    // goals" link) always wins over whatever section was last open.
+    const hashSection = (window.location.hash || "").replace(/^#/, "");
+    if (hashSection) initial = hashSection;
+    if (!SETTINGS_GROUPS.some((g) => g.items.some((i) => i.key === initial))) initial = "profile";
+    showSection(initial);
+  }
+
+  /* ============================================================
+     Profile Settings
+     ------------------------------------------------------------
+     "Which roster row is me" uses the same email-match approach as
+     profile.html. Saves write back to the Servi_Team sheet via
+     SheetsClient.updateTeamMemberFields(row, {...}) — only the 6
+     allowed fields (First/Last Name, Position, Email, Phone, Image).
+     ============================================================ */
+
+  const profileSettingsState = { me: null, pendingImage: undefined, selectedIso: PhoneCountries.DEFAULT_ISO };
+
+  function initialsFor(first, last) {
+    return (((first || "")[0] || "") + ((last || "")[0] || "")).toUpperCase() || "?";
+  }
+
+  async function loadProfileSettings() {
+    document.getElementById("settingsPhotoUploadBtn").innerHTML = `${Icons.svg("upload", { size: 15 })}<span>Upload photo</span>`;
+    document.getElementById("settingsPhotoDeleteBtn").innerHTML = `${Icons.svg("trash-2", { size: 15 })}<span>Remove photo</span>`;
+
+    try {
+      const { members } = await SheetsClient.fetchTeamRoster();
+      const account = Auth.getAccount() || {};
+      const myEmail = String(account.email || "").trim().toLowerCase();
+      const me = members.find((m) => m.email && m.email.trim().toLowerCase() === myEmail) || null;
+      profileSettingsState.me = me;
+
+      if (!me) {
+        document.getElementById("settingsProfileBody").hidden = true;
+        const box = document.getElementById("settingsProfileNotFound");
+        box.hidden = false;
+        box.innerHTML = `<p style="margin:0; font-size:13.5px;">We couldn't find a profile for you in the Servi_Team sheet (signed in as ${escapeHtml(account.email || "unknown")}) — ask an admin to add this email to the sheet's Email column.</p>`;
+        return;
+      }
+
+      document.getElementById("settingsProfileNotFound").hidden = true;
+      document.getElementById("settingsProfileBody").hidden = false;
+
+      document.getElementById("settingsFirstName").value = me.firstName || "";
+      document.getElementById("settingsLastName").value = me.lastName || "";
+      document.getElementById("settingsPosition").value = me.position || "";
+      document.getElementById("settingsEmail").value = me.email || "";
+      renderPhotoAvatar(me.image, me.firstName, me.lastName);
+
+      const digitsOnly = String(me.phone || "").replace(/\D/g, "");
+      const detected = PhoneCountries.detectFromDigits(digitsOnly);
+      if (detected) {
+        profileSettingsState.selectedIso = detected.iso;
+        document.getElementById("settingsPhoneLocal").value = digitsOnly.slice(detected.dial.length);
+      } else {
+        profileSettingsState.selectedIso = PhoneCountries.DEFAULT_ISO;
+        document.getElementById("settingsPhoneLocal").value = digitsOnly;
+      }
+      renderPhoneCountryButton();
+    } catch (err) {
+      document.getElementById("settingsProfileBody").hidden = true;
+      const needsScope = err && err.code === "NEEDS_SHEETS_SCOPE";
+      const box = document.getElementById("settingsProfileNotFound");
+      box.hidden = false;
+      box.innerHTML = `<p style="margin:0 0 10px; font-size:13.5px;">${needsScope ? "This dashboard needs permission to read/write the Servi_Team sheet." : "Couldn't load your profile right now."}</p>
+        <button type="button" id="settingsProfileRetryBtn" style="border:1.5px solid var(--primary); background:var(--primary); color:#fff; font:inherit; font-size:13px; font-weight:700; padding:8px 16px; border-radius:8px; cursor:pointer;">${needsScope ? "Connect Google Sheets" : "Try again"}</button>`;
+      document.getElementById("settingsProfileRetryBtn").addEventListener("click", async (e) => {
+        if (!needsScope) { loadProfileSettings(); return; }
+        e.target.disabled = true;
+        e.target.textContent = "Connecting…";
+        try {
+          await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+          loadProfileSettings();
+        } catch (err2) {
+          e.target.disabled = false;
+          e.target.textContent = "Connect Google Sheets";
+        }
+      });
+    }
+  }
+
+  function renderPhotoAvatar(imageValue, first, last) {
+    const el = document.getElementById("settingsPhotoAvatar");
+    const src = profileSettingsState.pendingImage !== undefined ? profileSettingsState.pendingImage : imageValue;
+    if (src && /^(https?:\/\/|data:image\/)/i.test(src)) {
+      el.innerHTML = `<img src="${src}" alt="" />`;
+    } else {
+      el.textContent = initialsFor(first, last);
+    }
+  }
+
+  // Resizes/compresses an uploaded image down to a small square JPEG data
+  // URI that fits comfortably inside a Google Sheets cell (50,000-character
+  // hard limit) — there's no Drive/file-storage integration here, so this
+  // is the only way a "photo" can live in a sheet cell at all. Backs off
+  // dimensions/quality a few times if the first attempt doesn't fit;
+  // returns null (with a message) if even the smallest attempt doesn't.
+  function compressImageToDataUri(file) {
+    const MAX_CHARS = 42000; // safety margin under Sheets' 50,000-char cell cap
+    const attempts = [
+      { dim: 220, quality: 0.72 },
+      { dim: 180, quality: 0.6 },
+      { dim: 140, quality: 0.5 },
+      { dim: 100, quality: 0.45 },
+    ];
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        function tryAttempt(i) {
+          if (i >= attempts.length) {
+            reject(new Error("That photo is too large/detailed to fit in a sheet cell even after heavy compression — try a simpler, more close-up photo."));
+            return;
+          }
+          const { dim, quality } = attempts[i];
+          // Center-crop to a square first so the result isn't stretched.
+          const side = Math.min(img.naturalWidth, img.naturalHeight);
+          const sx = (img.naturalWidth - side) / 2;
+          const sy = (img.naturalHeight - side) / 2;
+          canvas.width = dim;
+          canvas.height = dim;
+          ctx.clearRect(0, 0, dim, dim);
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, dim, dim);
+          const dataUri = canvas.toDataURL("image/jpeg", quality);
+          if (dataUri.length <= MAX_CHARS) resolve(dataUri);
+          else tryAttempt(i + 1);
+        }
+        tryAttempt(0);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Couldn't read that file as an image."));
+      };
+      img.src = objectUrl;
+    });
+  }
+
+  function wirePhotoControls() {
+    const input = document.getElementById("settingsPhotoInput");
+    document.getElementById("settingsPhotoUploadBtn").addEventListener("click", () => input.click());
+    input.addEventListener("change", async () => {
+      const file = input.files && input.files[0];
+      input.value = "";
+      if (!file) return;
+      const status = document.getElementById("settingsProfileStatus");
+      status.className = "settings-save-status";
+      status.textContent = "Compressing photo…";
+      try {
+        const dataUri = await compressImageToDataUri(file);
+        profileSettingsState.pendingImage = dataUri;
+        const me = profileSettingsState.me || {};
+        renderPhotoAvatar(dataUri, document.getElementById("settingsFirstName").value, document.getElementById("settingsLastName").value);
+        status.textContent = "Photo ready — click Save changes to apply it.";
+      } catch (err) {
+        status.className = "settings-save-status err";
+        status.textContent = err.message || "Couldn't process that photo.";
+      }
+    });
+    document.getElementById("settingsPhotoDeleteBtn").addEventListener("click", () => {
+      profileSettingsState.pendingImage = "";
+      renderPhotoAvatar("", document.getElementById("settingsFirstName").value, document.getElementById("settingsLastName").value);
+      const status = document.getElementById("settingsProfileStatus");
+      status.className = "settings-save-status";
+      status.textContent = "Photo removed — click Save changes to apply it.";
+    });
+  }
+
+  /* ---- phone country dropdown ---- */
+
+  function renderPhoneCountryButton() {
+    const c = PhoneCountries.findByIso(profileSettingsState.selectedIso) || PhoneCountries.findByIso(PhoneCountries.DEFAULT_ISO);
+    const wrap = document.getElementById("settingsPhoneCountry");
+    wrap.innerHTML = `
+      <button type="button" class="settings-phone-country-btn" id="settingsPhoneCountryBtn">
+        <span class="settings-phone-country-flag">${c.flag}</span>
+        <span class="settings-phone-country-dial">+${c.dial}</span>
+      </button>`;
+    document.getElementById("settingsPhoneCountryBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openPhoneCountryList();
+    });
+  }
+
+  function openPhoneCountryList() {
+    closePhoneCountryList();
+    const wrap = document.getElementById("settingsPhoneCountry");
+    const list = document.createElement("div");
+    list.className = "settings-phone-country-list";
+    list.id = "settingsPhoneCountryList";
+    list.innerHTML = `
+      <input type="text" class="settings-phone-country-search" placeholder="Search country…" id="settingsPhoneCountrySearch" />
+      <div id="settingsPhoneCountryOptions"></div>`;
+    wrap.appendChild(list);
+
+    function renderOptions(filter) {
+      const f = (filter || "").trim().toLowerCase();
+      const options = PhoneCountries.all().filter((c) => !f || c.name.toLowerCase().includes(f) || c.dial.includes(f));
+      document.getElementById("settingsPhoneCountryOptions").innerHTML = options.map((c) => `
+        <button type="button" class="settings-phone-country-option" data-iso="${c.iso}">
+          <span>${c.flag}</span><span class="cname">${escapeHtml(c.name)}</span><span class="cdial">+${c.dial}</span>
+        </button>`).join("") || `<div style="padding:10px; font-size:12.5px; color:var(--text-muted);">No matches</div>`;
+    }
+    renderOptions("");
+
+    document.getElementById("settingsPhoneCountrySearch").addEventListener("input", (e) => renderOptions(e.target.value));
+    document.getElementById("settingsPhoneCountryOptions").addEventListener("click", (e) => {
+      const opt = e.target.closest("[data-iso]");
+      if (!opt) return;
+      profileSettingsState.selectedIso = opt.dataset.iso;
+      renderPhoneCountryButton();
+      closePhoneCountryList();
+    });
+    document.getElementById("settingsPhoneCountrySearch").focus();
+
+    setTimeout(() => document.addEventListener("click", onOutsideClick), 0);
+  }
+  function onOutsideClick(e) {
+    const list = document.getElementById("settingsPhoneCountryList");
+    if (list && !list.contains(e.target)) closePhoneCountryList();
+  }
+  function closePhoneCountryList() {
+    const list = document.getElementById("settingsPhoneCountryList");
+    if (list) list.remove();
+    document.removeEventListener("click", onOutsideClick);
+  }
+
+  /* ---- save ---- */
+
+  function wireProfileSave() {
+    document.getElementById("settingsProfileSaveBtn").addEventListener("click", async () => {
+      const me = profileSettingsState.me;
+      if (!me) return;
+      const btn = document.getElementById("settingsProfileSaveBtn");
+      const status = document.getElementById("settingsProfileStatus");
+      btn.disabled = true;
+      status.className = "settings-save-status";
+      status.textContent = "Saving…";
+
+      const country = PhoneCountries.findByIso(profileSettingsState.selectedIso) || PhoneCountries.findByIso(PhoneCountries.DEFAULT_ISO);
+      const localDigits = String(document.getElementById("settingsPhoneLocal").value || "").replace(/\D/g, "");
+      // Stored as country-code + local digits, no "+"/spaces — matches the
+      // same raw digit-string convention the recruitment sheet's phone
+      // numbers already use (see phoneFormat.js's real worked examples).
+      const phoneValue = localDigits ? `${country.dial}${localDigits}` : "";
+
+      const fields = {
+        firstName: document.getElementById("settingsFirstName").value.trim(),
+        lastName: document.getElementById("settingsLastName").value.trim(),
+        position: document.getElementById("settingsPosition").value.trim(),
+        email: document.getElementById("settingsEmail").value.trim(),
+        phone: phoneValue,
+      };
+      if (profileSettingsState.pendingImage !== undefined) fields.image = profileSettingsState.pendingImage;
+
+      try {
+        await SheetsClient.updateTeamMemberFields(me._row, fields);
+        profileSettingsState.pendingImage = undefined;
+        status.className = "settings-save-status ok";
+        status.textContent = "Saved.";
+        loadProfileSettings();
+      } catch (err) {
+        status.className = "settings-save-status err";
+        status.textContent = err.message || "Couldn't save your profile.";
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function initProfileSettingsSection() {
+    wirePhotoControls();
+    wireProfileSave();
+    loadProfileSettings();
+  }
+
+  /* ============================================================
+     Security (Connections + Session)
+     ============================================================ */
+
+  function initConnectionsSection() {
+    const account = Auth.getAccount() || {};
+    const accountRow = document.getElementById("settingsAccountRow");
+    accountRow.innerHTML = `
+      <div class="settings-account-avatar">${account.picture ? `<img src="${account.picture}" alt="" />` : (account.name || account.email || "?").slice(0, 1).toUpperCase()}</div>
+      <div>
+        <div class="settings-account-name">${account.name || "Signed in"}</div>
+        <div class="settings-account-email">${account.email || ""}</div>
+      </div>`;
+
+    const SCOPE_ROWS = [
+      { key: "sheets", label: "Google Sheets", desc: "Reads/writes your recruitment leads, personal task sheet, Team profile, and General Chatroom messages.", scope: SheetsClient.SHEETS_SCOPE },
+      { key: "calendar", label: "Google Calendar", desc: "Reads events on your primary calendar (read-only).", scope: CalendarAPI.CALENDAR_SCOPE },
+    ];
+
+    function renderStatuses() {
+      const list = document.getElementById("settingsConnList");
+      list.innerHTML = SCOPE_ROWS.map((row) => {
+        const granted = Auth.hasScope(row.scope);
+        return `
+        <div class="settings-conn-row${granted ? " granted" : ""}">
+          <span class="settings-conn-icon">${Icons.svg(granted ? "check" : "x", { size: 16 })}</span>
+          <span class="settings-conn-info">
+            <div class="settings-conn-label">${row.label}</div>
+            <div class="settings-conn-desc">${row.desc}</div>
+          </span>
+          <span class="settings-conn-pill">${granted ? "Connected" : "Not connected"}</span>
+        </div>`;
+      }).join("");
+    }
+    renderStatuses();
+
+    const btn = document.getElementById("settingsReconnectBtn");
+    const hint = document.getElementById("settingsReconnectHint");
+    const msgWrap = document.getElementById("settingsReconnectMsgWrap");
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "Connecting…";
+      hint.textContent = "";
+      msgWrap.innerHTML = "";
+      try {
+        await Auth.reauthorize();
+        renderStatuses();
+        const stillMissing = SCOPE_ROWS.filter((row) => !Auth.hasScope(row.scope));
+        if (stillMissing.length) {
+          msgWrap.innerHTML = `<p class="reauth-fail-msg">Google didn't grant: <strong>${stillMissing.map((r) => r.label).join(", ")}</strong>. This almost always means that scope hasn't been added to this app's OAuth consent screen in Google Cloud Console yet (or the matching API isn't enabled there) — a one-time setup step on Google's side, not something wrong on your end.</p>`;
+        } else {
+          hint.textContent = "Everything's connected.";
+        }
+      } catch (err) {
+        msgWrap.innerHTML = `<p class="reauth-fail-msg">${err.message}</p>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Reconnect Google Account";
+      }
+    });
+  }
+
+  function timeAgoOrDate(date) {
+    if (!date) return "Never (this browser)";
+    const diffMs = Date.now() - date.getTime();
+    const mins = Math.round(diffMs / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return date.toLocaleString();
+  }
+
+  function initSecurityExtras() {
+    document.getElementById("settingsLastAccessed").textContent = timeAgoOrDate(Auth.getLastAccessed());
+
+    const toggle = document.getElementById("settingsAutoLogoutToggle");
+    const minutesInput = document.getElementById("settingsAutoLogoutMinutes");
+    toggle.checked = Auth.isAutoLogoutEnabled();
+    minutesInput.value = Auth.getAutoLogoutMinutes();
+    minutesInput.disabled = !toggle.checked;
+
+    function save() {
+      const minutes = Math.max(1, Math.min(240, Number(minutesInput.value) || 30));
+      minutesInput.value = minutes;
+      Auth.setAutoLogout(toggle.checked, minutes);
+      minutesInput.disabled = !toggle.checked;
+    }
+    toggle.addEventListener("change", save);
+    minutesInput.addEventListener("change", save);
+
+    const sessions = Auth.getSessionInfo();
+    document.getElementById("settingsSessionsList").innerHTML = sessions.map((s) => `
+      <div class="settings-session-row">
+        <div class="settings-session-icon">${Icons.svg("shield", { size: 17 })}</div>
+        <div style="flex:1; min-width:0;">
+          <div class="settings-session-name">${escapeHtml(s.label)}</div>
+          <div class="settings-session-meta">Last accessed ${timeAgoOrDate(s.lastAccessed)}</div>
+        </div>
+        ${s.current ? `<span class="settings-session-pill">Current</span>` : ""}
+      </div>`).join("");
+  }
+
+  /* ============================================================
+     Date & Time (foundation — persisted, not yet consumed elsewhere)
+     ============================================================ */
+
+  function initDateTimeSection() {
+    const KEYS = { date: "servi_v2_date_format", time: "servi_v2_time_format", tz: "servi_v2_timezone" };
+    const dateSel = document.getElementById("settingsDateFormat");
+    const timeSel = document.getElementById("settingsTimeFormat");
+    const tzSel = document.getElementById("settingsTimezone");
+    try { dateSel.value = localStorage.getItem(KEYS.date) || "dmy"; } catch (_) {}
+    try { timeSel.value = localStorage.getItem(KEYS.time) || "12"; } catch (_) {}
+    try { tzSel.value = localStorage.getItem(KEYS.tz) || "Asia/Beirut"; } catch (_) {}
+
+    const status = document.getElementById("settingsDateTimeStatus");
+    let saveTimer = null;
+    function save() {
+      try {
+        localStorage.setItem(KEYS.date, dateSel.value);
+        localStorage.setItem(KEYS.time, timeSel.value);
+        localStorage.setItem(KEYS.tz, tzSel.value);
+      } catch (_) {}
+      status.textContent = "Saved";
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => (status.textContent = ""), 2000);
+    }
+    [dateSel, timeSel, tzSel].forEach((el) => el.addEventListener("change", save));
+  }
+
+  /* ============================================================
+     Appearance — theme mode / palette / glass preview pickers
+     ============================================================ */
+
+  // "Default" (follow-the-OS) removed per request — Light already IS the
+  // default, so only these two real choices remain.
+  function themeModeCards() {
+    return [
+      { id: "light", label: "Light", thumbClass: "pv-light" },
+      { id: "dark", label: "Dark", thumbClass: "pv-dark" },
+    ];
+  }
+
+  function modeThumbHtml() {
+    return `<div class="pv-mode-body" style="width:100%;">
+        <div class="pv-mode-side"></div>
+        <div class="pv-mode-main"><div class="pv-mode-line" style="width:70%;"></div><div class="pv-mode-line" style="width:45%;"></div><div class="pv-mode-btn"></div></div>
+      </div>`;
+  }
+
+  function renderThemeRow() {
+    const current = Theme.getMode();
+    document.getElementById("settingsThemeRow").innerHTML = themeModeCards().map((c) => `
+      <button type="button" class="settings-preview-card${c.id === current ? " active" : ""}" data-mode="${c.id}">
+        <div class="settings-preview-thumb pv-mode-thumb ${c.thumbClass}">
+          <div class="pv-mode-bar"><span class="pv-mode-dot"></span><span class="pv-mode-dot"></span><span class="pv-mode-dot"></span></div>
+          ${modeThumbHtml()}
+        </div>
+        <div class="settings-preview-label"><span>${c.label}</span><span class="settings-preview-check">${Icons.svg("check", { size: 14 })}</span></div>
+      </button>`).join("");
+    document.querySelectorAll("#settingsThemeRow [data-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => { Theme.setMode(btn.dataset.mode); renderThemeRow(); });
+    });
+  }
+
+  function renderPaletteRow() {
+    const current = Theme.getPalette();
+    document.getElementById("settingsPaletteRow").innerHTML = Theme.PALETTES.map((p) => `
+      <button type="button" class="settings-preview-card${p.id === current ? " active" : ""}" data-palette="${p.id}" style="width:118px;">
+        <div class="settings-preview-thumb pv-palette-thumb" style="height:76px;">
+          <div class="pv-palette-dot" style="background:${p.swatch};"></div>
+          <div class="pv-palette-bars"><span style="background:${p.swatch}; opacity:.85;"></span><span style="background:${p.swatch}; opacity:.55;"></span><span style="background:${p.swatch}; opacity:.3;"></span></div>
+        </div>
+        <div class="settings-preview-label"><span>${p.label}</span><span class="settings-preview-check">${Icons.svg("check", { size: 14 })}</span></div>
+      </button>`).join("");
+    document.querySelectorAll("#settingsPaletteRow [data-palette]").forEach((btn) => {
+      btn.addEventListener("click", () => { Theme.setPalette(btn.dataset.palette); renderPaletteRow(); });
+    });
+  }
+
+  function renderGlassRow() {
+    const current = Theme.getGlass();
+    const cards = [
+      { id: "standard", label: "Standard", cls: "pv-standard" },
+      { id: "glass", label: "Glass", cls: "pv-glass" },
+    ];
+    document.getElementById("settingsGlassRow").innerHTML = cards.map((c) => `
+      <button type="button" class="settings-preview-card${c.id === current ? " active" : ""}" data-glass="${c.id}">
+        <div class="settings-preview-thumb pv-glass-thumb ${c.cls}">
+          <div class="pv-glass-bg"></div>
+          <div class="pv-glass-panel"><div class="pv-mode-line" style="width:70%;"></div><div class="pv-mode-line" style="width:45%;"></div></div>
+        </div>
+        <div class="settings-preview-label"><span>${c.label}</span><span class="settings-preview-check">${Icons.svg("check", { size: 14 })}</span></div>
+      </button>`).join("");
+    document.querySelectorAll("#settingsGlassRow [data-glass]").forEach((btn) => {
+      btn.addEventListener("click", () => { Theme.setGlass(btn.dataset.glass); renderGlassRow(); });
+    });
+  }
+
+  /* ============================================================
+     Chart Style — a real, distinct visual preview per type (not just a
+     name), built with small generic sample-data SVGs so the shape itself
+     is what's being compared, not real dashboard numbers. Line/Bar/
+     Horizontal Bar/Area are genuine, different renderings the existing
+     Calls/Applied trend charts (shared/chart.js) actually switch between.
+     Stacked Bar/Pie/Radial-Circular-Progress are shown too (they were
+     asked for explicitly) but marked "preview only" — a single daily-
+     count trend line has nothing to stack or slice, so picking one of
+     those three doesn't visibly change either existing chart yet; the
+     preference is still saved for whenever a chart with real multi-
+     series or part-of-a-whole data exists to apply it to.
+     ============================================================ */
+
+  const CHART_PREVIEW_SAMPLE = [3, 7, 5, 9, 4, 8, 6];
+
+  function chartPreviewSvg(id) {
+    const s = CHART_PREVIEW_SAMPLE;
+    const max = Math.max(...s);
+    const w = 120, h = 56, pad = 6;
+    const innerW = w - pad * 2, innerH = h - pad * 2;
+    const xAt = (i) => pad + (i / (s.length - 1)) * innerW;
+    const yAt = (v) => pad + innerH - (v / max) * innerH;
+
+    if (id === "line") {
+      const pts = s.map((v, i) => `${xAt(i)},${yAt(v)}`).join(" ");
+      return `<svg viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />${s.map((v, i) => `<circle cx="${xAt(i)}" cy="${yAt(v)}" r="2.5" fill="var(--primary)" />`).join("")}</svg>`;
+    }
+    if (id === "area") {
+      const pts = s.map((v, i) => `${xAt(i)},${yAt(v)}`).join(" ");
+      const area = `${xAt(0)},${pad + innerH} ${pts} ${xAt(s.length - 1)},${pad + innerH}`;
+      return `<svg viewBox="0 0 ${w} ${h}"><polygon points="${area}" fill="var(--primary)" opacity="0.25" /><polyline points="${pts}" fill="none" stroke="var(--primary)" stroke-width="2.5" /></svg>`;
+    }
+    if (id === "bar" || id === "stacked") {
+      const slot = innerW / s.length;
+      const barW = slot * 0.6;
+      const bars = s.map((v, i) => {
+        const x = pad + i * slot + (slot - barW) / 2;
+        const y = yAt(v);
+        const barH = pad + innerH - y;
+        if (id === "stacked") {
+          const splitH = barH * 0.45;
+          return `<rect x="${x}" y="${y + barH - splitH}" width="${barW}" height="${splitH}" rx="1.5" fill="var(--primary)" />
+                  <rect x="${x}" y="${y}" width="${barW}" height="${barH - splitH}" rx="1.5" fill="var(--good, #22c55e)" opacity="0.75" />`;
+        }
+        return `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="1.5" fill="var(--primary)" />`;
+      }).join("");
+      return `<svg viewBox="0 0 ${w} ${h}">${bars}</svg>`;
+    }
+    if (id === "hbar") {
+      const rows = s.slice(0, 4);
+      const rowH = innerH / rows.length;
+      const bars = rows.map((v, i) => {
+        const y = pad + i * rowH;
+        const barW = (v / max) * innerW;
+        return `<rect x="${pad}" y="${y + rowH * 0.18}" width="${innerW}" height="${rowH * 0.64}" rx="1.5" fill="var(--border)" />
+                <rect x="${pad}" y="${y + rowH * 0.18}" width="${barW}" height="${rowH * 0.64}" rx="1.5" fill="var(--primary)" />`;
+      }).join("");
+      return `<svg viewBox="0 0 ${w} ${h}">${bars}</svg>`;
+    }
+    if (id === "pie") {
+      const total = s.reduce((a, b) => a + b, 0);
+      const cx = w / 2, cy = h / 2, r = h / 2 - 4;
+      const colors = ["var(--primary)", "var(--good, #22c55e)", "#8b5cf6", "#f2b33d", "#6366f1", "#ec4899", "#64748b"];
+      let angle = -Math.PI / 2;
+      const slices = s.map((v, i) => {
+        const frac = v / total;
+        const next = angle + frac * Math.PI * 2;
+        const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
+        const x2 = cx + r * Math.cos(next), y2 = cy + r * Math.sin(next);
+        const large = frac > 0.5 ? 1 : 0;
+        const path = `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z`;
+        angle = next;
+        return `<path d="${path}" fill="${colors[i % colors.length]}" />`;
+      }).join("");
+      return `<svg viewBox="0 0 ${w} ${h}">${slices}</svg>`;
+    }
+    if (id === "radial") {
+      const cx = w / 2, cy = h / 2, r = h / 2 - 6;
+      const c = 2 * Math.PI * r;
+      const pct = 0.68;
+      return `<svg viewBox="0 0 ${w} ${h}">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="6" />
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--primary)" stroke-width="6" stroke-linecap="round"
+          stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct)}" transform="rotate(-90 ${cx} ${cy})" />
+        <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="13" font-weight="800" fill="var(--text)">${Math.round(pct * 100)}%</text>
+      </svg>`;
+    }
+    return "";
+  }
+
+  function renderChartStyleRow() {
+    const current = ChartSettings.get();
+    document.getElementById("settingsChartRow").innerHTML = ChartSettings.TYPES.map((t) => `
+      <button type="button" class="settings-preview-card settings-chart-card${t.id === current ? " active" : ""}" data-chart-type="${t.id}">
+        <div class="settings-preview-thumb settings-chart-thumb">${chartPreviewSvg(t.id)}</div>
+        <div class="settings-preview-label"><span>${t.label}</span><span class="settings-preview-check">${Icons.svg("check", { size: 14 })}</span></div>
+        ${t.appliesToCurrentCharts ? "" : `<span class="settings-chart-preview-note">Preview only — no current chart uses this shape yet</span>`}
+      </button>`).join("");
+    document.querySelectorAll("#settingsChartRow [data-chart-type]").forEach((btn) => {
+      btn.addEventListener("click", () => { ChartSettings.set(btn.dataset.chartType); renderChartStyleRow(); });
+    });
+  }
+
+  /* ============================================================
+     Goals & Progress
+     ------------------------------------------------------------
+     Real progress needs the same recruitment Leads/Calls sheet every
+     other page reads (see shared/goals.js's own header comment for
+     exactly which fields/metrics) — Settings doesn't fetch that sheet
+     anywhere else, so this section fetches it once, eagerly, the same
+     way loadProfileSettings() above eagerly fetches the Team roster
+     even before the Profile section is opened.
+     ============================================================ */
+
+  const goalsState = { records: [], editingId: null };
+
+  async function loadGoalsData() {
+    const hint = document.getElementById("settingsGoalsDataHint");
+    try {
+      const { records } = await SheetsClient.fetchAll();
+      DataStore.setRecords(records);
+      goalsState.records = records;
+      hint.textContent = "";
+      hint.hidden = true;
+    } catch (err) {
+      hint.hidden = false;
+      hint.textContent = err && err.code === "NEEDS_SHEETS_SCOPE"
+        ? "Reconnect Google Sheets (Security section above) to see live progress — your goals are still saved."
+        : `Couldn't load your Leads/Calls numbers (${err.message}) — your goals are still saved, progress just can't be computed right now.`;
+    }
+    renderGoalsList();
+  }
+
+  function goalRingSvg(percent, tone) {
+    const r = 22;
+    const c = 2 * Math.PI * r;
+    const clamped = Math.max(0, Math.min(100, percent));
+    const offset = c - (clamped / 100) * c;
+    const toneColor = { primary: "var(--primary)", teal: "#14b8a6", purple: "#8b5cf6", green: "var(--good, #22c55e)" }[tone] || "var(--primary)";
+    return `
+      <svg viewBox="0 0 56 56" width="52" height="52">
+        <circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--surface-alt)" stroke-width="6" />
+        <circle cx="28" cy="28" r="${r}" fill="none" stroke="${toneColor}" stroke-width="6" stroke-linecap="round"
+          stroke-dasharray="${c}" stroke-dashoffset="${offset}" transform="rotate(-90 28 28)" />
+        <text x="28" y="32" text-anchor="middle" font-size="12" font-weight="800" fill="var(--text)">${Math.round(clamped)}%</text>
+      </svg>`;
+  }
+
+  const GOAL_METRIC_TONE = { calls: "primary", leads: "teal", referrals: "purple", applications: "green" };
+
+  function renderGoalsList() {
+    const goals = Goals.getAll();
+    const list = document.getElementById("settingsGoalsList");
+    if (!goals.length) {
+      list.innerHTML = `<p class="ov-hint">No goals yet — add one above.</p>`;
+      return;
+    }
+    list.innerHTML = goals
+      .map((g) => {
+        const { current, target, pct } = Goals.computeProgress(g, goalsState.records);
+        const periodLabel = (Goals.PERIODS.find((p) => p.key === g.period) || {}).label || "";
+        const metricLabel = (Goals.METRICS.find((m) => m.key === g.metric) || {}).label || g.metric;
+        const narrowLabel = g.filterDimension && g.filterValue ? ` &middot; ${g.filterDimension === "vertical" ? DataStore.verticalLabel(g.filterValue) : escapeHtml(g.filterValue)}` : "";
+        return `
+        <div class="settings-goal-row">
+          ${goalRingSvg(pct, GOAL_METRIC_TONE[g.metric])}
+          <div class="settings-goal-row-body">
+            <div class="settings-goal-row-label">${escapeHtml(g.label)}</div>
+            <div class="settings-goal-row-sub">${current} / ${target} &middot; ${metricLabel} &middot; ${periodLabel}${narrowLabel}</div>
+          </div>
+          <div class="settings-goal-row-actions">
+            <button type="button" class="icon-btn" data-edit="${g.id}">${Icons.svg("pencil", { size: 14 })}<span>Edit</span></button>
+            <button type="button" class="icon-btn" data-delete="${g.id}">${Icons.svg("trash-2", { size: 14 })}<span>Delete</span></button>
+          </div>
+        </div>`;
+      })
+      .join("");
+
+    list.querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => openGoalForm(btn.dataset.edit));
+    });
+    list.querySelectorAll("[data-delete]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!confirm("Delete this goal? This can't be undone.")) return;
+        Goals.remove(btn.dataset.delete);
+        renderGoalsList();
+      });
+    });
+  }
+
+  function populateGoalFormSelects() {
+    document.getElementById("settingsGoalMetric").innerHTML = Goals.METRICS.map((m) => `<option value="${m.key}">${m.label}</option>`).join("");
+    document.getElementById("settingsGoalPeriod").innerHTML = Goals.PERIODS.map((p) => `<option value="${p.key}">${p.label}</option>`).join("");
+    document.getElementById("settingsGoalDimension").innerHTML = Goals.DIMENSIONS.map((d) => `<option value="${d.key}">${d.label}</option>`).join("");
+  }
+
+  function refreshGoalValueField() {
+    const dimension = document.getElementById("settingsGoalDimension").value;
+    const field = document.getElementById("settingsGoalValueField");
+    const select = document.getElementById("settingsGoalValueSelect");
+    const text = document.getElementById("settingsGoalValueText");
+    if (!dimension) {
+      field.hidden = true;
+      return;
+    }
+    field.hidden = false;
+    if (dimension === "vertical") {
+      select.hidden = false;
+      text.hidden = true;
+      select.innerHTML = DataStore.VERTICALS.map((v) => `<option value="${v.key}">${v.label}</option>`).join("");
+    } else {
+      select.hidden = true;
+      text.hidden = false;
+    }
+  }
+
+  function openGoalForm(goalId) {
+    goalsState.editingId = goalId || null;
+    const goal = goalId ? Goals.getAll().find((g) => g.id === goalId) : null;
+    document.getElementById("settingsGoalFormTitle").textContent = goal ? "Edit Goal" : "Add a Goal";
+    document.getElementById("settingsGoalLabel").value = goal ? goal.label : "";
+    document.getElementById("settingsGoalMetric").value = goal ? goal.metric : "calls";
+    document.getElementById("settingsGoalPeriod").value = goal ? goal.period : "week";
+    document.getElementById("settingsGoalDimension").value = goal ? goal.filterDimension || "" : "";
+    document.getElementById("settingsGoalTarget").value = goal ? goal.target : "";
+    refreshGoalValueField();
+    if (goal && goal.filterDimension === "vertical") document.getElementById("settingsGoalValueSelect").value = goal.filterValue || "";
+    if (goal && goal.filterDimension === "district") document.getElementById("settingsGoalValueText").value = goal.filterValue || "";
+    document.getElementById("settingsGoalFormStatus").textContent = "";
+    document.getElementById("settingsGoalsFormCard").hidden = false;
+    document.getElementById("settingsGoalsFormCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function closeGoalForm() {
+    goalsState.editingId = null;
+    document.getElementById("settingsGoalsFormCard").hidden = true;
+  }
+
+  function initGoalsSection() {
+    populateGoalFormSelects();
+    document.getElementById("settingsAddGoalBtn").addEventListener("click", () => openGoalForm(null));
+    document.getElementById("settingsGoalCancelBtn").addEventListener("click", closeGoalForm);
+    document.getElementById("settingsGoalDimension").addEventListener("change", refreshGoalValueField);
+
+    document.getElementById("settingsGoalSaveBtn").addEventListener("click", () => {
+      const label = document.getElementById("settingsGoalLabel").value.trim();
+      const metric = document.getElementById("settingsGoalMetric").value;
+      const period = document.getElementById("settingsGoalPeriod").value;
+      const dimension = document.getElementById("settingsGoalDimension").value;
+      const target = Number(document.getElementById("settingsGoalTarget").value);
+      const status = document.getElementById("settingsGoalFormStatus");
+
+      if (!label) { status.className = "settings-save-status err"; status.textContent = "Give this goal a short description."; return; }
+      if (!target || target < 1) { status.className = "settings-save-status err"; status.textContent = "Target must be a number of at least 1."; return; }
+
+      let value = "";
+      if (dimension === "vertical") value = document.getElementById("settingsGoalValueSelect").value;
+      if (dimension === "district") value = document.getElementById("settingsGoalValueText").value.trim();
+      if (dimension && !value) { status.className = "settings-save-status err"; status.textContent = "Pick or type which one to narrow to, or set \"Narrow to\" back to \"all of them\"."; return; }
+
+      const payload = { label, metric, period, filterDimension: dimension, filterValue: value, target };
+      if (goalsState.editingId) Goals.update(goalsState.editingId, payload);
+      else Goals.add(payload);
+
+      closeGoalForm();
+      renderGoalsList();
+    });
+
+    loadGoalsData();
+  }
+
+  function initAppearanceSection() {
+    renderThemeRow();
+    renderPaletteRow();
+    renderGlassRow();
+    renderChartStyleRow();
+    document.getElementById("settingsResetAppearanceBtn").addEventListener("click", () => {
+      if (!confirm("Reset appearance to the default Servi look (Light, Servi Orange, Standard)?")) return;
+      Theme.resetAppearance();
+      renderThemeRow();
+      renderPaletteRow();
+      renderGlassRow();
+      const status = document.getElementById("settingsResetStatus");
+      status.className = "settings-save-status ok";
+      status.textContent = "Appearance reset.";
+      setTimeout(() => (status.textContent = ""), 2500);
+    });
+  }
+
+  /* ============================================================
+     Notifications — mute toggles
+     ============================================================ */
+
+  function initNotificationsSection() {
+    const rows = [
+      { type: null, label: "All notifications", sub: "Turns every popup, sound, and bell badge off in this browser." },
+      { type: "message", label: Notifications.TYPE_LABEL.message, sub: "New messages in the General Chatroom." },
+      { type: "group_message", label: Notifications.TYPE_LABEL.group_message, sub: "Updates in other group chats." },
+      { type: "private_message", label: Notifications.TYPE_LABEL.private_message, sub: "Direct messages from a teammate." },
+      { type: "calendar_reminder", label: Notifications.TYPE_LABEL.calendar_reminder, sub: "Upcoming events on your calendar." },
+      { type: "task_reminder", label: Notifications.TYPE_LABEL.task_reminder, sub: "Tasks on your list that are due soon." },
+    ];
+
+    function render() {
+      const allMuted = Notifications.isAllMuted();
+      document.getElementById("settingsNotifList").innerHTML = rows.map((r) => {
+        const isMaster = r.type === null;
+        const checked = isMaster ? allMuted : Notifications.isMuted(r.type);
+        return `
+        <div class="settings-notif-row${isMaster ? " is-master" : ""}${!isMaster && allMuted ? " disabled-by-master" : ""}">
+          <div class="settings-notif-icon">${Icons.svg(isMaster ? "bell" : (Notifications.TYPE_ICON[r.type] || "bell"), { size: 16 })}</div>
+          <div class="settings-notif-info">
+            <div class="settings-notif-label">${r.label}</div>
+            <div class="settings-notif-sub">${r.sub}</div>
+          </div>
+          <label class="settings-toggle">
+            <input type="checkbox" data-type="${r.type || "__all__"}" ${checked ? "checked" : ""} ${!isMaster && allMuted ? "disabled" : ""} />
+            <span class="settings-toggle-track"></span>
+          </label>
+        </div>`;
+      }).join("");
+
+      document.querySelectorAll('#settingsNotifList input[type="checkbox"]').forEach((input) => {
+        input.addEventListener("change", () => {
+          if (input.dataset.type === "__all__") Notifications.setAllMuted(input.checked);
+          else Notifications.setMuted(input.dataset.type, input.checked);
+          render();
+        });
+      });
+    }
+    render();
+  }
+
+  /* ============================================================
+     Language
+     ============================================================ */
+
+  function initLanguageSection() {
+    const KEY = "servi_v2_language";
+    const langs = [
+      { id: "en", flag: "EN", name: "English", native: "English" },
+      { id: "fr", flag: "FR", name: "French", native: "Français" },
+    ];
+    function current() {
+      try { return localStorage.getItem(KEY) || "en"; } catch (_) { return "en"; }
+    }
+    function render() {
+      const cur = current();
+      document.getElementById("settingsLangRow").innerHTML = langs.map((l) => `
+        <button type="button" class="settings-lang-card${l.id === cur ? " active" : ""}" data-lang="${l.id}">
+          <span class="settings-lang-flag">${l.flag}</span>
+          <span class="settings-lang-name">${l.name}</span>
+          <span class="settings-lang-native">${l.native}</span>
+          <span class="settings-lang-check">${Icons.svg("check", { size: 13 })}<span>Selected</span></span>
+        </button>`).join("");
+      document.querySelectorAll("#settingsLangRow [data-lang]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          // I18n.setLang both persists the choice (same "servi_v2_language"
+          // key this section already used) AND re-translates this page
+          // immediately — the "storage" event Theme-style cross-tab sync
+          // only fires in OTHER tabs, so this page needs its own call too.
+          I18n.setLang(btn.dataset.lang);
+          render();
+        });
+      });
+    }
+    render();
+  }
+
+  /* ============================================================
+     AI Settings — model select (shared w/ AI Assistant page) +
+     suggested-queries editor
+     ============================================================ */
+
+  function initAiSettingsSection() {
+    const modelSelect = document.getElementById("settingsGeminiModelSelect");
+    modelSelect.innerHTML = GeminiConfig.AVAILABLE_MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join("");
+    function loadModel() {
+      let model;
+      try { model = localStorage.getItem(GeminiConfig.MODEL_STORAGE_KEY) || GeminiConfig.DEFAULT_MODEL; } catch (_) { model = GeminiConfig.DEFAULT_MODEL; }
+      modelSelect.value = model;
+    }
+    loadModel();
+    modelSelect.addEventListener("change", () => {
+      try { localStorage.setItem(GeminiConfig.MODEL_STORAGE_KEY, modelSelect.value); } catch (_) {}
+    });
+    window.addEventListener("storage", (e) => { if (e.key === GeminiConfig.MODEL_STORAGE_KEY) loadModel(); });
+
+    /* ---- suggested queries editor ---- */
+    let queries = [];
+    function loadQueries() {
+      try {
+        const raw = localStorage.getItem(GeminiConfig.SUGGESTED_QUERIES_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        queries = Array.isArray(parsed) && parsed.length ? parsed.slice() : GeminiConfig.DEFAULT_SUGGESTED_QUERIES.slice();
+      } catch (_) {
+        queries = GeminiConfig.DEFAULT_SUGGESTED_QUERIES.slice();
+      }
+    }
+    function renderQueries() {
+      document.getElementById("settingsQueryList").innerHTML = queries.map((q, i) => `
+        <div class="settings-query-row" data-idx="${i}">
+          <input type="text" value="${escapeHtml(q)}" />
+          <button type="button" class="settings-query-btn" data-action="up" title="Move up">${Icons.svg("arrow-up", { size: 14 })}</button>
+          <button type="button" class="settings-query-btn" data-action="down" title="Move down">${Icons.svg("arrow-down", { size: 14 })}</button>
+          <button type="button" class="settings-query-btn danger" data-action="remove" title="Remove">${Icons.svg("trash-2", { size: 14 })}</button>
+        </div>`).join("");
+    }
+    document.getElementById("settingsQueryAddBtn").innerHTML = `${Icons.svg("plus", { size: 14 })}<span>Add a query</span>`;
+
+    document.getElementById("settingsQueryList").addEventListener("input", (e) => {
+      const row = e.target.closest(".settings-query-row");
+      if (!row) return;
+      queries[Number(row.dataset.idx)] = e.target.value;
+    });
+    document.getElementById("settingsQueryList").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action]");
+      if (!btn) return;
+      const row = btn.closest(".settings-query-row");
+      const idx = Number(row.dataset.idx);
+      if (btn.dataset.action === "remove") queries.splice(idx, 1);
+      if (btn.dataset.action === "up" && idx > 0) [queries[idx - 1], queries[idx]] = [queries[idx], queries[idx - 1]];
+      if (btn.dataset.action === "down" && idx < queries.length - 1) [queries[idx + 1], queries[idx]] = [queries[idx], queries[idx + 1]];
+      renderQueries();
+    });
+    document.getElementById("settingsQueryAddBtn").addEventListener("click", () => {
+      queries.push("");
+      renderQueries();
+      const inputs = document.querySelectorAll("#settingsQueryList input");
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+
+    const queryStatus = document.getElementById("settingsQueryStatus");
+    document.getElementById("settingsQuerySaveBtn").addEventListener("click", () => {
+      const cleaned = queries.map((q) => q.trim()).filter(Boolean);
+      try {
+        localStorage.setItem(GeminiConfig.SUGGESTED_QUERIES_STORAGE_KEY, JSON.stringify(cleaned));
+        queries = cleaned;
+        renderQueries();
+        queryStatus.className = "settings-save-status ok";
+        queryStatus.textContent = "Saved.";
+      } catch (_) {
+        queryStatus.className = "settings-save-status err";
+        queryStatus.textContent = "Couldn't save.";
+      }
+      setTimeout(() => (queryStatus.textContent = ""), 2500);
+    });
+    document.getElementById("settingsQueryResetBtn").addEventListener("click", () => {
+      if (!confirm("Reset suggested queries to the defaults?")) return;
+      try { localStorage.removeItem(GeminiConfig.SUGGESTED_QUERIES_STORAGE_KEY); } catch (_) {}
+      loadQueries();
+      renderQueries();
+    });
+
+    loadQueries();
+    renderQueries();
+  }
+
+  /* ============================================================
+     Help & Support (static shell)
+     ============================================================ */
+
+  function initHelpSection() {
+    const cards = [
+      { icon: "book-open", title: "Documentation", desc: "Guides for using the dashboard aren't written yet — this card is ready for them." },
+      { icon: "help-circle", title: "FAQs", desc: "Frequently asked questions will live here once they're collected." },
+      { icon: "mail", title: "Contact Support", desc: "No support contact is set up yet — ask an admin directly in the meantime." },
+      { icon: "message-circle", title: "Give Feedback", desc: "A feedback channel for this dashboard isn't wired up yet." },
+    ];
+    document.getElementById("settingsHelpGrid").innerHTML = cards.map((c) => `
+      <div class="settings-help-card">
+        <div class="settings-help-icon">${Icons.svg(c.icon, { size: 17 })}</div>
+        <div>
+          <div class="settings-help-title">${c.title}</div>
+          <div class="settings-help-desc">${c.desc}</div>
+        </div>
+      </div>`).join("");
+  }
+
+  /* ============================================================
+     About Us logo — theme-aware, same convention as everywhere else
+     ============================================================ */
+  function initAboutLogo() {
+    function update() {
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      document.getElementById("settingsAboutLogo").src = `../assets/images/${isDark ? "icon-dark" : "icon-light"}.png`;
+    }
+    update();
+    new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+
+  /* ============================================================
+     Bootstrap
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Settings] Auth.init() failed — Reconnect button won't work until the page is reloaded with a working connection:", e);
+    }
+    AppShell.init({ current: "settings", root: ".." });
+    initSettingsNav();
+    initProfileSettingsSection();
+    initConnectionsSection();
+    initSecurityExtras();
+    initDateTimeSection();
+    initAppearanceSection();
+    initNotificationsSection();
+    initLanguageSection();
+    initAiSettingsSection();
+    initGoalsSection();
+    initHelpSection();
+    initAboutLogo();
+  }
+</script>
+
+</body>
+</html>

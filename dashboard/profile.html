@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Profile</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Profile</h1>
+      <p class="page-subheading">Your own info, tasks, and calendar. Everything here is read-only — editing (where applicable) will live in Settings later.</p>
+    </div>
+    <div class="ov-header-actions">
+      <span class="ov-updated-at" id="profileUpdatedAt"></span>
+      <button type="button" class="ov-refresh-btn" id="profileRefreshBtn"></button>
+    </div>
+  </div>
+
+  <div id="profileNotFound" class="ov-card profile-not-found" hidden></div>
+
+  <div id="profileBody" hidden>
+    <section class="ov-card profile-hero-card">
+      <div class="profile-hero-avatar" id="profileHeroAvatar"></div>
+      <div>
+        <div class="profile-hero-name" id="profileHeroName"></div>
+        <div class="profile-hero-sub" id="profileHeroSub"></div>
+      </div>
+    </section>
+
+    <div class="profile-layout">
+      <div class="profile-main">
+        <section class="ov-card" id="profileInfoCard">
+          <div class="ov-card-header">
+            <h2>Info</h2>
+            <span class="ov-hint">From the Servi_Team sheet</span>
+          </div>
+          <div class="profile-info-list" id="profileInfoList"></div>
+        </section>
+
+        <section class="ov-card" id="profileTasksCard">
+          <div class="ov-card-header">
+            <h2>Tasks</h2>
+            <span class="ov-hint" id="profileTasksHint">This month only</span>
+          </div>
+          <div id="profileTasksBody">
+            <div class="ov-kpi-row cols-4" id="profileTasksKpiRow">
+              <div class="ov-skeleton" style="height:100px;"></div>
+              <div class="ov-skeleton" style="height:100px;"></div>
+              <div class="ov-skeleton" style="height:100px;"></div>
+              <div class="ov-skeleton" style="height:100px;"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="profile-side">
+        <section class="ov-card" id="profileScheduleCard">
+          <div class="ov-card-header"><h2>Upcoming Scheduled</h2></div>
+          <div class="team-schedule-nav">
+            <span class="team-schedule-month" id="profileScheduleMonth"></span>
+            <div class="team-schedule-nav-btns">
+              <button type="button" id="profileSchedulePrev" aria-label="Previous days"></button>
+              <button type="button" id="profileScheduleNext" aria-label="Next days"></button>
+            </div>
+          </div>
+          <div class="team-schedule-strip" id="profileScheduleStrip"></div>
+          <div class="team-schedule-toggle" id="profileScheduleToggle">
+            <button type="button" data-view="meeting" class="active">Meeting</button>
+            <button type="button" data-view="task">Task</button>
+          </div>
+          <div class="team-schedule-list" id="profileScheduleList"></div>
+        </section>
+
+        <section class="ov-card profile-stats-card">
+          <div class="ov-card-header">
+            <h2>Your Numbers</h2>
+            <span class="ov-hint">All-time</span>
+          </div>
+          <div class="profile-stats-col" id="profileStatsCol">
+            <div class="ov-skeleton" style="height:90px;"></div>
+            <div class="ov-skeleton" style="height:90px;"></div>
+            <div class="ov-skeleton" style="height:90px;"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/statusSettings.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/areaSettings.js"></script>
+<script src="../shared/team.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/teamTasksConfig.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     Profile page
+     ------------------------------------------------------------
+     Personal, read-only profile for whoever is signed in. "Which
+     roster member is me" is resolved by matching Auth.getAccount()
+     .email against the Servi_Team roster's Email column
+     (case-insensitive) — if nothing matches, the page shows an
+     honest "profile not found" state instead of guessing or
+     inventing a member.
+
+     Judgment calls (flagged, both confirmed with the user):
+       - Birthdate/Nationality: not originally in the Servi_Team
+         sheet — the user added those two columns while this page
+         was being built, so they're mapped in sheetsConfig.js's
+         TeamRosterConfig.COLUMNS like every other field. A member
+         whose own cell is still blank shows "Not set" rather than
+         inventing a value.
+       - Date Joined is display-only here (like the whole page) AND
+         is called out as never becoming editable even in the future
+         Settings editor, since it's defined as sourced only from
+         this sheet — see the note under that row below.
+       - The 3 stat rectangles (Calls Made / Leads Added / Total
+         Tasks Completed) are ALL-TIME totals, confirmed with the
+         user — unlike the Tasks section above, which is fixed to
+         the current month only, per the user's explicit request.
+       - Tasks/"Total Tasks Completed" depend on the signed-in
+         member having a real personal tracker sheet configured in
+         shared/teamTasksConfig.js's MEMBER_SHEETS map. As of this
+         build that's only Mohamad Ramadan (roster ID 20260002) —
+         same carried-over limitation as the Team page. Anyone else
+         sees an honest "no tracker sheet configured for you yet"
+         message instead of blank/zero numbers presented as real.
+     ============================================================ */
+
+  function initProfilePage() {
+    document.getElementById("profileSchedulePrev").innerHTML = Icons.svg("chevron-left", { size: 15 });
+    document.getElementById("profileScheduleNext").innerHTML = Icons.svg("chevron-right", { size: 15 });
+
+    const refreshBtn = document.getElementById("profileRefreshBtn");
+    refreshBtn.innerHTML = `${Icons.svg("clock", { size: 15 })}<span>Refresh</span>`;
+    refreshBtn.addEventListener("click", () => loadProfilePage());
+
+    wireScheduleWidget();
+    loadProfilePage();
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  }
+
+  // Accepts a real http(s) URL OR a data: image URI — the latter is how a
+  // photo uploaded via Settings > Profile Settings gets stored (Sheets
+  // cells can't hold binary/files, so an uploaded photo is compressed
+  // client-side into a small data: URI string instead — see settings.html).
+  function looksLikeUrl(s) {
+    return /^(https?:\/\/|data:image\/)/i.test(String(s || "").trim());
+  }
+
+  function initialsFor(member) {
+    const f = (member.firstName || "").trim();
+    const l = (member.lastName || "").trim();
+    return ((f[0] || "") + (l[0] || "")).toUpperCase() || "?";
+  }
+
+  function calcAge(birthdate) {
+    if (!birthdate) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birthdate.getFullYear();
+    const m = today.getMonth() - birthdate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthdate.getDate())) age--;
+    return age >= 0 ? age : null;
+  }
+
+  /* ============================================================
+     Data loading — roster (to find "me"), the general recruitment
+     sheet (for Calls Made / Leads Added), and my own personal
+     tracker sheet if one is configured. Promise.allSettled so one
+     failing never blanks the others.
+     ============================================================ */
+
+  const profileState = { me: null, records: [], tasks: null, tasksConfigured: false, tasksError: null };
+
+  async function loadProfilePage() {
+    document.getElementById("profileRefreshBtn").classList.add("spinning");
+
+    const [rosterRes, recordsRes] = await Promise.allSettled([
+      SheetsClient.fetchTeamRoster(),
+      SheetsClient.fetchAll(),
+    ]);
+
+    if (recordsRes.status === "fulfilled") {
+      profileState.records = recordsRes.value.records;
+      DataStore.setRecords(profileState.records);
+    } else {
+      profileState.records = [];
+    }
+
+    if (rosterRes.status !== "fulfilled") {
+      renderLoadError(rosterRes.reason);
+      document.getElementById("profileRefreshBtn").classList.remove("spinning");
+      return;
+    }
+
+    const account = Auth.getAccount() || {};
+    const myEmail = String(account.email || "").trim().toLowerCase();
+    const me = rosterRes.value.members.find((m) => m.email && m.email.trim().toLowerCase() === myEmail) || null;
+    profileState.me = me;
+
+    if (!me) {
+      renderNotFound(account);
+      document.getElementById("profileRefreshBtn").classList.remove("spinning");
+      return;
+    }
+
+    document.getElementById("profileNotFound").hidden = true;
+    document.getElementById("profileBody").hidden = false;
+
+    renderHero(me);
+    renderInfoList(me);
+
+    const taskConfig = (TeamTasksConfig.MEMBER_SHEETS || {})[me.id];
+    profileState.tasksConfigured = !!taskConfig;
+    if (taskConfig) {
+      try {
+        const { tasks } = await SheetsClient.fetchTasksFromConfig(taskConfig);
+        profileState.tasks = tasks;
+        profileState.tasksError = null;
+      } catch (err) {
+        profileState.tasks = null;
+        profileState.tasksError = err;
+      }
+    } else {
+      profileState.tasks = null;
+      profileState.tasksError = null;
+    }
+
+    renderTasks();
+    renderStats(me);
+    initScheduleWidget();
+
+    document.getElementById("profileUpdatedAt").textContent =
+      "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    document.getElementById("profileRefreshBtn").classList.remove("spinning");
+  }
+
+  function renderLoadError(err) {
+    const needsScope = err && err.code === "NEEDS_SHEETS_SCOPE";
+    document.getElementById("profileBody").hidden = true;
+    const box = document.getElementById("profileNotFound");
+    box.hidden = false;
+    box.innerHTML = `
+      <p>${needsScope ? "This dashboard needs permission to read the Servi_Team sheet." : "Couldn't load your profile right now."}</p>
+      ${!needsScope && err && err.message ? `<p class="ov-reconnect-detail">${escapeHtml(err.message)}</p>` : ""}
+      <button type="button" id="profileReconnectBtn" style="margin-top:12px; border:1.5px solid var(--primary); background:var(--primary); color:#fff; font:inherit; font-size:13px; font-weight:700; padding:9px 18px; border-radius:8px; cursor:pointer;">${needsScope ? "Connect Google Sheets" : "Try again"}</button>`;
+    document.getElementById("profileReconnectBtn").addEventListener("click", async (e) => {
+      if (!needsScope) { loadProfilePage(); return; }
+      e.target.disabled = true;
+      e.target.textContent = "Connecting…";
+      try {
+        await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+        loadProfilePage();
+      } catch (err2) {
+        e.target.disabled = false;
+        e.target.textContent = "Connect Google Sheets";
+        e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${escapeHtml(err2.message)}</p>`);
+      }
+    });
+  }
+
+  function renderNotFound(account) {
+    document.getElementById("profileBody").hidden = true;
+    const box = document.getElementById("profileNotFound");
+    box.hidden = false;
+    box.innerHTML = `
+      <p>We couldn't find a profile for you in the Servi_Team sheet.</p>
+      <p class="ov-reconnect-detail">Signed in as ${escapeHtml(account.email || "unknown")} — ask an admin to add this email to the Servi_Team sheet's Email column.</p>`;
+  }
+
+  /* ============================================================
+     Hero — big Name LastName header + avatar
+     ============================================================ */
+
+  function renderHero(member) {
+    const avatarEl = document.getElementById("profileHeroAvatar");
+    avatarEl.innerHTML = looksLikeUrl(member.image) ? `<img src="${escapeHtml(member.image)}" alt="" />` : initialsFor(member);
+    document.getElementById("profileHeroName").textContent = member.fullName;
+    document.getElementById("profileHeroSub").textContent = member.position || "Team member";
+  }
+
+  /* ============================================================
+     Info list — Position / Birthdate+age / Email / Phone /
+     Nationality / Date Joined. All read-only; Date Joined is
+     flagged as permanently non-editable (sheet-only), per the
+     user's explicit instruction.
+     ============================================================ */
+
+  function infoRowHtml(icon, label, value, note) {
+    return `
+      <div class="profile-info-row">
+        <span class="profile-info-icon">${Icons.svg(icon, { size: 16 })}</span>
+        <div class="profile-info-body">
+          <div class="profile-info-label">${label}</div>
+          <div class="profile-info-value">${value}</div>
+          ${note ? `<div class="profile-info-note">${note}</div>` : ""}
+        </div>
+      </div>`;
+  }
+
+  function renderInfoList(member) {
+    const age = calcAge(member.birthdate);
+    const birthdateValue = member.birthdate ? `${member.birthdate.toLocaleDateString()}${age !== null ? ` (age ${age})` : ""}` : "Not set";
+    const dateJoinedValue = member.dateJoined ? member.dateJoined.toLocaleDateString() : "Not set";
+
+    const rows = [
+      infoRowHtml("briefcase", "Position", escapeHtml(member.position || "—")),
+      infoRowHtml("calendar", "Birthdate", escapeHtml(birthdateValue)),
+      infoRowHtml("inbox", "Email", escapeHtml(member.email || "—")),
+      infoRowHtml("phone", "Phone", escapeHtml(member.phone || "—")),
+      infoRowHtml("globe", "Nationality", escapeHtml(member.nationality || "Not set")),
+      infoRowHtml("calendar", "Date Joined", escapeHtml(dateJoinedValue), "Synced from the Servi_Team sheet — can't be edited manually, even in Settings."),
+    ];
+    document.getElementById("profileInfoList").innerHTML = rows.join("");
+  }
+
+  /* ============================================================
+     Your Numbers — Calls Made / Leads Added / Total Tasks
+     Completed, all-time (confirmed with the user).
+     ============================================================ */
+
+  function renderStats(member) {
+    const records = profileState.records;
+    const callsMade = Team.metricsFor(records, member.fullName).callsMade;
+    const leadsAdded = records.filter((r) => r.addedBy === member.fullName).length;
+
+    let completedValue, completedLabel;
+    if (!profileState.tasksConfigured) {
+      completedValue = "—";
+      completedLabel = "Total Tasks Completed · no tracker sheet configured yet";
+    } else if (profileState.tasksError) {
+      completedValue = "—";
+      completedLabel = "Total Tasks Completed · couldn't load tracker sheet";
+    } else if (profileState.tasks === null) {
+      completedValue = "…";
+      completedLabel = "Total Tasks Completed · loading";
+    } else {
+      completedValue = profileState.tasks.filter(TaskSheet.isCompleted).length;
+      completedLabel = "Total Tasks Completed";
+    }
+
+    const cards = [
+      { tone: "teal", icon: "phone-call", value: callsMade, label: "Calls Made" },
+      { tone: "indigo", icon: "target", value: leadsAdded, label: "Leads Added" },
+      { tone: "applied", icon: "list-checks", value: completedValue, label: completedLabel },
+    ];
+
+    document.getElementById("profileStatsCol").innerHTML = cards
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top">
+          <div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div>
+        </div>
+        <div class="ov-kpi-value${typeof c.value !== "number" ? " kpi-value-text" : ""}">${typeof c.value === "number" ? c.value.toLocaleString() : escapeHtml(String(c.value))}</div>
+        <div class="ov-kpi-label">${c.label}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ============================================================
+     Tasks — this month only, all of them: total/completed/overdue/
+     critical KPI row, then the actual task list below.
+     ============================================================ */
+
+  function taskPillClass(slug) {
+    if (slug === "completed") return "applied";
+    if (slug === "at-risk") return "notApplied";
+    if (slug === "in-progress") return "followUp";
+    return "other";
+  }
+
+  function taskStatusLabel(task, slug) {
+    if (task.status) return task.status;
+    return { completed: "Completed", "at-risk": "At Risk", "in-progress": "In Progress", "not-defined": "Not Defined" }[slug] || "—";
+  }
+
+  // Judgment call (flagged): a task can technically match more than one of
+  // the 4 requested colors at once (e.g. overdue AND critical, or critical
+  // AND no-deadline). Rather than inventing a 5th blended color, each box
+  // gets ONE tone by this precedence — Completed always wins (it's done,
+  // full stop), then Overdue, then Critical, then No Deadline — with every
+  // matching state still called out as its own small flag underneath, so
+  // nothing is hidden even when only one color shows. Tasks matching none
+  // of the 4 (on track, has a deadline, not yet due) get a neutral
+  // "active" tone rather than going uncolored.
+  function taskTone(t) {
+    if (TaskSheet.isCompleted(t)) return "completed";
+    if (TaskSheet.isOverdue(t)) return "overdue";
+    if (TaskSheet.isCritical(t)) return "critical";
+    if (!t.deadline) return "no-deadline";
+    return "active";
+  }
+
+  function taskBoxHtml(t) {
+    const slug = TaskSheet.statusSlug(t.status);
+    const tone = taskTone(t);
+    const flags = [
+      TaskSheet.isCompleted(t) ? '<span class="profile-task-flag completed">Completed</span>' : "",
+      TaskSheet.isOverdue(t) ? '<span class="profile-task-flag overdue">Overdue</span>' : "",
+      TaskSheet.isCritical(t) ? '<span class="profile-task-flag critical">Critical</span>' : "",
+      !t.deadline ? '<span class="profile-task-flag no-deadline">No Deadline</span>' : "",
+    ].join("");
+    return `
+      <div class="profile-task-box tone-${tone}">
+        <div class="profile-task-box-top">
+          <span class="profile-task-title">${escapeHtml(t.description || "(untitled task)")}</span>
+          <span class="leads-table-status-pill ${taskPillClass(slug)}">${escapeHtml(taskStatusLabel(t, slug))}</span>
+        </div>
+        <div class="profile-task-meta">
+          <span>${escapeHtml(t.category || "No category")}</span>
+          <span>${t.priority ? escapeHtml(t.priority) + " priority" : "No priority"}</span>
+          <span>${t.deadline ? "Due " + t.deadline.toLocaleDateString() : "No deadline"}</span>
+        </div>
+        ${flags ? `<div class="profile-task-flags">${flags}</div>` : ""}
+      </div>`;
+  }
+
+  function renderTasks() {
+    const hint = document.getElementById("profileTasksHint");
+    const body = document.getElementById("profileTasksBody");
+
+    if (!profileState.tasksConfigured) {
+      hint.textContent = "This month only";
+      body.innerHTML = `<div class="profile-tasks-empty">No personal task-tracker sheet is configured for you yet — ask an admin to get one connected. Once it is, your tasks will show up here automatically.</div>`;
+      return;
+    }
+    if (profileState.tasksError) {
+      const needsScope = profileState.tasksError.code === "NEEDS_SHEETS_SCOPE";
+      hint.textContent = "This month only";
+      body.innerHTML = `<div class="ov-reconnect"><p>${needsScope ? "This dashboard needs permission to read your task tracker sheet." : "Couldn't load your tasks right now."}</p><button type="button" id="profileTasksRetry">Try again</button></div>`;
+      document.getElementById("profileTasksRetry").addEventListener("click", loadProfilePage);
+      return;
+    }
+    if (profileState.tasks === null) {
+      hint.textContent = "This month only";
+      body.innerHTML = `
+        <div class="ov-kpi-row cols-4">
+          <div class="ov-skeleton" style="height:100px;"></div>
+          <div class="ov-skeleton" style="height:100px;"></div>
+          <div class="ov-skeleton" style="height:100px;"></div>
+          <div class="ov-skeleton" style="height:100px;"></div>
+        </div>`;
+      return;
+    }
+
+    const { startOfMonth, addMonths } = DataStore._dateHelpers;
+    const start = startOfMonth(new Date());
+    const end = addMonths(start, 1);
+    const monthTasks = profileState.tasks.filter((t) => TaskSheet.fallsInRange(t, start, end));
+
+    const completed = monthTasks.filter(TaskSheet.isCompleted).length;
+    const overdue = monthTasks.filter(TaskSheet.isOverdue).length;
+    const critical = monthTasks.filter(TaskSheet.isCritical).length;
+
+    hint.textContent = `${monthTasks.length} task${monthTasks.length === 1 ? "" : "s"} this month`;
+
+    const cards = [
+      { tone: "leads", icon: "list-checks", value: monthTasks.length, label: "All Tasks", sub: "This month" },
+      { tone: "applied", icon: "check", value: completed, label: "Completed", sub: "This month" },
+      { tone: "calls", icon: "clock", value: overdue, label: "Overdue", sub: "Past deadline, not done" },
+      { tone: "red", icon: "trending-down", value: critical, label: "Critical", sub: "High priority or at risk" },
+    ];
+
+    let html = `<div class="ov-kpi-row cols-4">${cards
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top"><div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div></div>
+        <div class="ov-kpi-value">${c.value.toLocaleString()}</div>
+        <div class="ov-kpi-label">${c.label} &middot; ${c.sub}</div>
+      </div>`
+      )
+      .join("")}</div>`;
+
+    if (!monthTasks.length) {
+      html += `<div class="profile-tasks-empty">No tasks fall in this month yet.</div>`;
+    } else {
+      // Overdue/no-deadline tasks first (most urgent to see), then by
+      // deadline, undated tasks last.
+      const sorted = monthTasks.slice().sort((a, b) => {
+        const ad = a.deadline ? a.deadline.getTime() : Infinity;
+        const bd = b.deadline ? b.deadline.getTime() : Infinity;
+        return ad - bd;
+      });
+      // A plain, non-scrollable list of boxes — each one grows to fit its
+      // own text instead of living inside a fixed-height scroll area, per
+      // the user's explicit request.
+      html += `<div class="profile-task-list">${sorted.map(taskBoxHtml).join("")}</div>`;
+    }
+
+    body.innerHTML = html;
+  }
+
+  /* ============================================================
+     "Upcoming Scheduled" — ported from team.html verbatim (same
+     UI/colors), just scoped to this one member's own connected
+     tasks on the Task toggle instead of every member's combined.
+     ============================================================ */
+
+  const scheduleState = { anchor: new Date(), selected: new Date(), view: "meeting" };
+
+  function sameDay(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+
+  function renderScheduleStrip() {
+    const strip = document.getElementById("profileScheduleStrip");
+    const days = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(scheduleState.anchor);
+      d.setDate(d.getDate() + i);
+      days.push(d);
+    }
+    document.getElementById("profileScheduleMonth").textContent = days[0].toLocaleDateString([], { month: "long", year: "numeric" });
+    strip.innerHTML = days
+      .map((d, i) => `
+        <div class="team-schedule-day${sameDay(d, scheduleState.selected) ? " selected" : ""}" data-idx="${i}">
+          <span class="team-schedule-day-dow">${d.toLocaleDateString([], { weekday: "short" })}</span>
+          <span class="team-schedule-day-dom">${d.getDate()}</span>
+        </div>`)
+      .join("");
+    strip.querySelectorAll(".team-schedule-day").forEach((el, i) => {
+      el.addEventListener("click", () => {
+        scheduleState.selected = days[i];
+        renderScheduleStrip();
+        renderScheduleList();
+      });
+    });
+  }
+
+  async function renderScheduleList() {
+    const list = document.getElementById("profileScheduleList");
+    list.innerHTML = `<div class="ov-skeleton" style="height:40px;"></div>`;
+
+    if (scheduleState.view === "task") {
+      const dayStart = new Date(scheduleState.selected); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+      const myTasks = profileState.tasks || [];
+      const due = myTasks.filter((t) => t.deadline && t.deadline >= dayStart && t.deadline < dayEnd);
+      if (!profileState.tasksConfigured) {
+        list.innerHTML = `<p class="team-schedule-empty">No personal task-tracker sheet configured for you yet.</p>`;
+        return;
+      }
+      if (!due.length) {
+        list.innerHTML = `<p class="team-schedule-empty">No tracked tasks due this day.</p>`;
+        return;
+      }
+      list.innerHTML = due.map((t) => `
+        <div class="cal-event-row">
+          <div class="cal-event-info">
+            <div class="cal-event-title">${escapeHtml(t.description || "(untitled task)")}</div>
+            <div class="cal-event-meta">${escapeHtml(t.category || "Task")}${t.priority ? " · " + escapeHtml(t.priority) : ""}</div>
+          </div>
+        </div>`).join("");
+      return;
+    }
+
+    // Meeting view — Google Calendar events for the selected day.
+    try {
+      const dayStart = new Date(scheduleState.selected); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+      const events = await CalendarAPI.listEvents({ timeMin: dayStart, timeMax: dayEnd, maxResults: 20 });
+      if (!events.length) {
+        list.innerHTML = `<p class="team-schedule-empty">Nothing on the calendar this day.</p>`;
+        return;
+      }
+      list.innerHTML = events.map((ev) => `
+        <div class="cal-event-row">
+          <div class="cal-event-info">
+            <div class="cal-event-title">${escapeHtml(ev.title)}</div>
+            <div class="cal-event-meta">${ev.allDay ? "All day" : ev.start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}${ev.location ? " · " + escapeHtml(ev.location) : ""}</div>
+          </div>
+        </div>`).join("");
+    } catch (err) {
+      if (err.code === "NEEDS_CALENDAR_SCOPE") {
+        list.innerHTML = `<p class="team-schedule-empty">Connect Google Calendar (Settings) to see meetings here.</p>`;
+      } else {
+        list.innerHTML = `<p class="team-schedule-empty">Couldn't load the calendar right now.</p>`;
+      }
+    }
+  }
+
+  function wireScheduleWidget() {
+    document.getElementById("profileSchedulePrev").addEventListener("click", () => {
+      scheduleState.anchor.setDate(scheduleState.anchor.getDate() - 5);
+      renderScheduleStrip();
+    });
+    document.getElementById("profileScheduleNext").addEventListener("click", () => {
+      scheduleState.anchor.setDate(scheduleState.anchor.getDate() + 5);
+      renderScheduleStrip();
+    });
+    document.getElementById("profileScheduleToggle").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-view]");
+      if (!btn) return;
+      scheduleState.view = btn.dataset.view;
+      document.querySelectorAll("#profileScheduleToggle button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderScheduleList();
+    });
+  }
+
+  function initScheduleWidget() {
+    renderScheduleStrip();
+    renderScheduleList();
+  }
+
+  /* ============================================================
+     Bootstrap
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Profile] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "profile", root: ".." });
+    initProfilePage();
+  }
+</script>
+
+</body>
+</html>

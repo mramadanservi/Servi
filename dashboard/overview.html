@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — General Overview</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js) —
+     without this, a token that expires while the page is left open can't
+     be refreshed without an interactive reconnect. Loaded as a plain
+     blocking script, same as login.html, so it's ready before Auth.init()
+     runs below. -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">General Overview</h1>
+      <p class="page-subheading">A high-level view of the whole business — totals, goals, and AI insights.</p>
+    </div>
+    <div class="ov-header-actions">
+      <span class="ov-updated-at" id="ovUpdatedAt"></span>
+      <button type="button" class="ov-refresh-btn" id="ovRefreshBtn"></button>
+    </div>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2>Leads, Calls &amp; Applications</h2>
+      <span class="ov-hint">Each card's grid breaks its total down by vertical</span>
+    </div>
+    <div class="ov-kpi-row" id="ovKpiRow">
+      <div class="ov-skeleton" style="height:230px;"></div>
+      <div class="ov-skeleton" style="height:230px;"></div>
+      <div class="ov-skeleton" style="height:230px;"></div>
+    </div>
+  </section>
+
+  <div class="ov-layout" id="ovLayout">
+    <div class="ov-main">
+      <div class="cal-widget" id="overviewCalWidget">
+        <div class="cal-widget-header">
+          <div class="cal-widget-title" id="overviewCalTitle">Upcoming on your calendar</div>
+          <a class="cal-widget-link" href="calendar.html">View full calendar</a>
+        </div>
+        <div id="overviewCalBody" class="cal-widget-loading">Loading your calendar…</div>
+      </div>
+
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>My Tasks</h2>
+          <span class="ov-hint" id="ovTasksHint"></span>
+        </div>
+        <div class="ov-task-list" id="ovTasksList"></div>
+      </section>
+    </div>
+
+    <div class="ov-side">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Goals &amp; Progress</h2>
+          <a class="link-btn" href="settings.html#goals">Manage goals</a>
+        </div>
+        <div class="ov-goals-grid" id="ovGoalsGrid"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="ovInsights"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>General Chatroom</h2>
+          <a class="cal-widget-link" href="chat.html">Open chat</a>
+        </div>
+        <div class="ov-chat-preview" id="ovChatPreview"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/statusSettings.js"></script>
+<script src="../shared/goals.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<!-- Needed for the "Total Applied" KPI card below — see initOverviewData's
+     comment on why it now reads the SAME source as the Applied page
+     (From Fillout + these 75 legacy rows) instead of the recruitment
+     sheet's Status="Applied" count. -->
+<script src="../shared/legacyApplied.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     Calendar widget (small, "upcoming events" version — the full
+     month view lives on the Calendar page)
+     ============================================================ */
+  async function initOverviewCalendarWidget() {
+    const titleEl = document.getElementById("overviewCalTitle");
+    const bodyEl = document.getElementById("overviewCalBody");
+    titleEl.innerHTML = `${Icons.svg("calendar", { size: 16 })}<span>Upcoming on your calendar</span>`;
+
+    function dow(d) { return d.toLocaleDateString([], { weekday: "short" }); }
+    function timeLabel(ev) {
+      if (ev.allDay) return "All day";
+      return ev.start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+    function dateLine(ev) {
+      const isToday = new Date().toDateString() === ev.start.toDateString();
+      const dayLabel = isToday ? "Today" : ev.start.toLocaleDateString([], { month: "short", day: "numeric" });
+      return `${dayLabel} · ${timeLabel(ev)}${ev.location ? " · " + ev.location : ""}`;
+    }
+
+    try {
+      const events = await CalendarAPI.listEvents({ timeMin: new Date(), maxResults: 5 });
+      if (events.length === 0) {
+        bodyEl.className = "cal-widget-empty";
+        bodyEl.textContent = "Nothing coming up on your calendar right now.";
+        return;
+      }
+      bodyEl.className = "cal-widget-list";
+      bodyEl.innerHTML = events
+        .slice(0, 5)
+        .map(
+          (ev) => `
+        <div class="cal-event-row">
+          <div class="cal-event-datebox">
+            <span class="cal-dow">${dow(ev.start)}</span>
+            <span class="cal-dom">${ev.start.getDate()}</span>
+          </div>
+          <div class="cal-event-info">
+            <div class="cal-event-title">${ev.title}</div>
+            <div class="cal-event-meta">${dateLine(ev)}</div>
+          </div>
+        </div>
+      `
+        )
+        .join("");
+    } catch (err) {
+      bodyEl.className = "cal-widget-error";
+      if (err.code === "NEEDS_CALENDAR_SCOPE") {
+        bodyEl.innerHTML = `<p>Connect your Google Calendar to see upcoming events here.</p><button type="button" id="overviewCalReconnect">Connect Google Calendar</button>`;
+      } else {
+        bodyEl.innerHTML = `<p>Couldn't load your calendar right now.</p><button type="button" id="overviewCalReconnect">Try reconnecting</button>`;
+      }
+      const btn = document.getElementById("overviewCalReconnect");
+      if (btn) {
+        btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          btn.textContent = "Connecting…";
+          const oldMsg = bodyEl.querySelector(".reauth-fail-msg");
+          if (oldMsg) oldMsg.remove();
+          try {
+            await Auth.reauthorize(CalendarAPI.CALENDAR_SCOPE);
+            initOverviewCalendarWidget();
+          } catch (e) {
+            btn.disabled = false;
+            btn.textContent = "Try again";
+            btn.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${e.message}</p>`);
+          }
+        });
+      }
+    }
+  }
+
+  /* ============================================================
+     General Chatroom preview
+     ------------------------------------------------------------
+     PLACEHOLDER DATA NOTICE — same situation as notifications.js:
+     there's no real chat backend yet (chat.html is still a stub, same
+     as it is in v1), so this shows clearly-generic sample activity
+     rather than inventing specific people or messages. Once real
+     chatroom data exists, replace SAMPLE_CHAT_ACTIVITY + this render
+     call with a fetch of the actual latest messages — nothing else
+     about the card (markup, styling, the "Open chat" link) needs to
+     change.
+     ============================================================ */
+  const SAMPLE_CHAT_ACTIVITY = [
+    { icon: "message-circle", text: "New message posted in the General Chatroom.", time: "2m ago" },
+    { icon: "users", text: "A teammate shared an update in the group chat.", time: "26m ago" },
+    { icon: "message-square-plus", text: "Someone replied in the General Chatroom.", time: "1h ago" },
+    { icon: "message-circle", text: "New message posted in the General Chatroom.", time: "3h ago" },
+  ];
+
+  function renderChatPreview() {
+    const container = document.getElementById("ovChatPreview");
+    container.innerHTML = SAMPLE_CHAT_ACTIVITY.map(
+      (item) => `
+      <div class="ov-chat-row">
+        <span class="ov-chat-icon">${Icons.svg(item.icon, { size: 15 })}</span>
+        <span class="ov-chat-info">
+          <div class="ov-chat-text">${item.text}</div>
+          <div class="ov-chat-time">${item.time}</div>
+        </span>
+      </div>`
+    ).join("");
+  }
+
+  /* ============================================================
+     Real recruitment data — General Overview's KPIs, vertical grid,
+     goals, follow-up queue and insights. All computed from the same
+     Google Sheet your v1 dashboard reads (see shared/sheetsConfig.js /
+     sheetsClient.js / dataStore.js — ported from v1's js/config.js,
+     js/sheetsClient.js, js/dataStore.js).
+     ============================================================ */
+
+  const ovState = {
+    records: [],
+    // null = not loaded yet / failed to load this time — see
+    // loadAppliedForKpi() and renderKpiRow()'s fallback below.
+    appliedRecords: null,
+  };
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  const refreshBtn = document.getElementById("ovRefreshBtn");
+  refreshBtn.innerHTML = `${Icons.svg("clock", { size: 15 })}<span>Refresh</span>`;
+  refreshBtn.addEventListener("click", () => {
+    initOverviewData();
+    initPersonalTasksWidget();
+  });
+
+  /* ============================================================
+     "Total Applied" KPI — sourced from the Applied page's own data
+     ------------------------------------------------------------
+     Diagnosed a real mismatch: this card used to count recruitment-
+     sheet rows with Status="Applied" (355 on your real data) — a staff-
+     set CRM status, not a verified submission. The Applied page counts
+     actual "From Fillout" live-sheet rows plus the 75 legacy applicants
+     (266 on your real data). Those are two different questions ("how
+     many leads did we mark Applied in our pipeline" vs. "how many
+     people actually have an application on file") that will keep
+     drifting apart — 355 vs 266 is a ~34% overcount, not a rounding
+     difference. Per your instruction, this card now reads the SAME
+     source as the Applied page (fetchApplied() + LEGACY_APPLIED, same
+     merge as applied.html's withLegacyApplied) instead of the
+     recruitment sheet's Status count, including its embedded 9-vertical
+     breakdown (so the numbers under the headline actually add up to it).
+     Falls back to the old recruitment-sheet count, clearly labeled, if
+     the Applied sheet can't be reached this time — a fetch problem here
+     shouldn't take down the rest of Overview.
+     ============================================================ */
+  async function loadAppliedForKpi() {
+    try {
+      const { records } = await SheetsClient.fetchApplied();
+      const legacy = (typeof LEGACY_APPLIED !== "undefined" ? LEGACY_APPLIED : []).map((r) => ({
+        ...r,
+        dob: r.dob ? new Date(r.dob) : null,
+        submittedAt: r.submittedAt ? new Date(r.submittedAt) : null,
+      }));
+      ovState.appliedRecords = [...records, ...legacy];
+    } catch (err) {
+      console.warn("[Overview] Couldn't load the Applied (From Fillout) sheet for the Total Applied KPI — falling back to the recruitment sheet's Status=\"Applied\" count:", err);
+      ovState.appliedRecords = null;
+    }
+  }
+
+  async function initOverviewData() {
+    document.getElementById("ovKpiRow").innerHTML = `
+      <div class="ov-skeleton" style="height:230px;"></div>
+      <div class="ov-skeleton" style="height:230px;"></div>
+      <div class="ov-skeleton" style="height:230px;"></div>`;
+    document.getElementById("ovLayout").style.opacity = "0.5";
+    refreshBtn.classList.add("spinning");
+
+    try {
+      const [{ records }] = await Promise.all([SheetsClient.fetchAll(), loadAppliedForKpi()]);
+      ovState.records = records;
+      DataStore.setRecords(records);
+      renderOverviewAll();
+      document.getElementById("ovUpdatedAt").textContent =
+        "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      document.getElementById("ovLayout").style.opacity = "1";
+    } catch (err) {
+      renderOverviewDataError(err);
+    } finally {
+      refreshBtn.classList.remove("spinning");
+    }
+  }
+
+  function renderOverviewDataError(err) {
+    console.error("[Overview] Failed to load Sheets data:", err);
+    const needsScope = err.code === "NEEDS_SHEETS_SCOPE";
+    const message = needsScope
+      ? "This dashboard needs permission to read your Google Sheet."
+      : "Couldn't load your recruitment data right now.";
+    // Show the actual error underneath so this is self-diagnosing instead of
+    // a dead end — e.g. a wrong sheet/tab name, a network hiccup, or a
+    // permission problem on the spreadsheet itself all say something
+    // different here than a missing OAuth scope does.
+    const detail = !needsScope && err.message ? `<p class="ov-reconnect-detail">${err.message}</p>` : "";
+    document.getElementById("ovKpiRow").innerHTML = `
+      <div class="ov-reconnect" style="grid-column: 1 / -1;">
+        <p>${message}</p>
+        ${detail}
+        <button type="button" id="ovReconnectBtn">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+      </div>`;
+    document.getElementById("ovLayout").hidden = true;
+    document.getElementById("ovReconnectBtn").addEventListener("click", async (e) => {
+      if (!needsScope) {
+        initOverviewData();
+        return;
+      }
+      e.target.disabled = true;
+      e.target.textContent = "Connecting…";
+      const oldMsg = document.querySelector("#ovKpiRow .reauth-fail-msg");
+      if (oldMsg) oldMsg.remove();
+      try {
+        await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+        document.getElementById("ovLayout").hidden = false;
+        initOverviewData();
+      } catch (err2) {
+        e.target.disabled = false;
+        e.target.textContent = "Connect Google Sheets";
+        e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${err2.message}</p>`);
+      }
+    });
+  }
+
+  function renderOverviewAll() {
+    document.getElementById("ovLayout").hidden = false;
+    const records = DataStore.getFilteredRecords();
+    const kpis = DataStore.kpis(records);
+    renderKpiRow(records, kpis);
+    renderGoals(records);
+    renderInsights(records, kpis);
+  }
+
+  // ---------------- KPI hero row ----------------
+
+  function trendBadge(wow) {
+    if (wow.deltaPct === null) {
+      return wow.thisWeek > 0
+        ? `<span class="ov-kpi-trend up">${Icons.svg("trending-up", { size: 12 })}New</span>`
+        : `<span class="ov-kpi-trend flat">${Icons.svg("minus", { size: 12 })}No activity yet</span>`;
+    }
+    if (wow.direction === "flat") return `<span class="ov-kpi-trend flat">${Icons.svg("minus", { size: 12 })}Same as last week</span>`;
+    const icon = wow.direction === "up" ? "trending-up" : "trending-down";
+    const sign = wow.direction === "up" ? "+" : "";
+    return `<span class="ov-kpi-trend ${wow.direction}">${Icons.svg(icon, { size: 12 })}${sign}${wow.deltaPct}% vs last week</span>`;
+  }
+
+  // Short labels for the compact 3x3 per-card vertical grids below — the
+  // full labels (e.g. "Sport Coaching & Fitness Training") are used as the
+  // box's title/tooltip, but don't fit in a box a third the width of the
+  // old standalone grid's boxes.
+  // Renders the 3x3 mini-grid embedded inside one KPI card, showing a
+  // single metric (metricKey: "totalLeads" | "callsMade" | "applied")
+  // broken down per vertical — this is what replaced the old standalone
+  // 9-box "Leads by Vertical" section (see history: the three KPI cards
+  // used to sit above one shared vertical grid; now each card carries its
+  // own, so Total Leads / Total Calls / Total Applied each show their own
+  // 9-vertical breakdown — 27 boxes total, 9 per card).
+  // `getCount(records, verticalKey)` decides how each of the 9 mini-boxes
+  // is computed — different for the recruitment-sheet-based cards (Total
+  // Leads/Total Calls) than for the Applied-sheet-based card (see
+  // renderKpiRow below), so this no longer assumes one fixed metric shape.
+  function kpiVerticalGridHtml(records, getCount) {
+    return (
+      `<div class="ov-kpi-vgrid">` +
+      DataStore.VERTICALS.map((v) => {
+        const count = getCount(records, v.key);
+        return `
+        <div class="ov-kpi-vbox" title="${v.label}">
+          <span class="ov-kpi-vbox-icon">${Icons.svg(v.icon, { size: 11 })}</span>
+          <span class="ov-kpi-vbox-value">${count.toLocaleString()}</span>
+          <span class="ov-kpi-vbox-label">${v.label}</span>
+        </div>`;
+      }).join("") +
+      `</div>`
+    );
+  }
+
+  // Per request: these 3 totals carry no trend arrows, matching the Total
+  // Leads/Total Calls/Total Applied boxes on their own pages.
+  function renderKpiRow(records, kpis) {
+    // See loadAppliedForKpi()'s header comment above for why "Total
+    // Applied" reads a different sheet than Total Leads/Total Calls.
+    const appliedRecords = ovState.appliedRecords;
+    const usingRealApplied = Array.isArray(appliedRecords);
+    const appliedTotal = usingRealApplied ? appliedRecords.length : kpis.applied;
+    const appliedConversion = kpis.totalLeads ? Math.round((appliedTotal / kpis.totalLeads) * 1000) / 10 : 0;
+
+    const cards = [
+      {
+        tone: "leads", icon: "target", value: kpis.totalLeads, label: "Total Leads", sub: "All-time",
+        gridRecords: records, getCount: (recs, key) => DataStore.verticalStats(recs, key).totalLeads,
+      },
+      {
+        tone: "calls", icon: "phone-call", value: kpis.totalCalled, label: "Total Calls", sub: `${kpis.callConnectRate}% connect rate`,
+        gridRecords: records, getCount: (recs, key) => DataStore.verticalStats(recs, key).callsMade,
+      },
+      {
+        tone: "applied", icon: "check", value: appliedTotal, label: "Total Applied",
+        sub: usingRealApplied ? `${appliedConversion}% conversion` : `${appliedConversion}% conversion &middot; recruitment-sheet estimate`,
+        gridRecords: usingRealApplied ? appliedRecords : records,
+        getCount: usingRealApplied
+          ? (recs, key) => recs.filter((r) => DataStore.verticalsOf(r).includes(key)).length
+          : (recs, key) => DataStore.verticalStats(recs, key).applied,
+      },
+    ];
+
+    document.getElementById("ovKpiRow").innerHTML = cards
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top">
+          <div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div>
+        </div>
+        <div class="ov-kpi-value">${c.value.toLocaleString()}</div>
+        <div class="ov-kpi-label">${I18n.t(c.label)} &middot; ${I18n.t(c.sub)}</div>
+        ${kpiVerticalGridHtml(c.gridRecords, c.getCount)}
+      </div>`
+      )
+      .join("");
+  }
+
+  // ---------------- goals & progress ----------------
+
+  function ringSvg(percent, tone) {
+    const r = 30;
+    const c = 2 * Math.PI * r;
+    const clamped = Math.max(0, Math.min(100, percent));
+    const offset = c - (clamped / 100) * c;
+    return `
+      <svg viewBox="0 0 74 74" class="goal-ring">
+        <circle cx="37" cy="37" r="${r}" class="goal-ring-track" />
+        <circle cx="37" cy="37" r="${r}" class="goal-ring-fill tone-${tone}"
+          stroke-dasharray="${c}" stroke-dashoffset="${offset}" transform="rotate(-90 37 37)" />
+        <text x="37" y="42" text-anchor="middle" class="goal-ring-text">${Math.round(clamped)}%</text>
+      </svg>`;
+  }
+
+  // Renders every one of the user's own custom goals (see shared/goals.js
+  // — this replaced the old fixed weekly/monthly-toggle 4-metric grid),
+  // each against its OWN period, not a page-wide Weekly/Monthly toggle —
+  // a flexible goal already carries its own time window, so there's
+  // nothing left for a toggle to switch between.
+  const GOAL_TONES = { calls: "primary", leads: "teal", referrals: "purple", applications: "green" };
+
+  function renderGoals(records) {
+    const goals = Goals.getAll();
+    const grid = document.getElementById("ovGoalsGrid");
+    if (!goals.length) {
+      grid.innerHTML = `<p class="ov-hint">No goals yet — <a href="settings.html#goals">add one in Settings</a>.</p>`;
+      return;
+    }
+    grid.innerHTML = goals
+      .map((goal) => {
+        const { current, target, pct } = Goals.computeProgress(goal, records);
+        const tone = GOAL_TONES[goal.metric] || "primary";
+        const periodLabel = (Goals.PERIODS.find((p) => p.key === goal.period) || {}).label || "";
+        return `
+        <div class="ov-goal-card" title="${escapeHtml(goal.label)}">
+          ${ringSvg(pct, tone)}
+          <div class="ov-goal-value">${current} <span class="ov-goal-of">/ ${target}</span></div>
+          <div class="ov-goal-label">${escapeHtml(goal.label)}</div>
+          <div class="ov-goal-period">${periodLabel}</div>
+        </div>`;
+      })
+      .join("");
+  }
+
+  // ---------------- personal tasks (your own tracker, not recruitment leads) ----------------
+  //
+  // Reads a completely different Google Sheet from the recruitment data above
+  // — see PersonalTasksConfig in shared/sheetsConfig.js — so it's fetched and
+  // rendered independently (own try/catch, own reconnect button) rather than
+  // inside initOverviewData()'s pipeline. That way a problem with this sheet
+  // (wrong tab name, not shared with this account, etc.) can never take down
+  // the KPIs/vertical grid/goals the way one bad chart library load once did.
+
+  function taskDeadlineLabel(task) {
+    if (!task.deadline) return { text: "No deadline", overdue: false };
+    const days = Math.floor((task.deadline.getTime() - Date.now()) / 86400000);
+    if (days < 0) return { text: `${Math.abs(days)}d overdue`, overdue: true };
+    if (days === 0) return { text: "Due today", overdue: true };
+    if (days === 1) return { text: "Due tomorrow", overdue: false };
+    return { text: `Due in ${days}d`, overdue: false };
+  }
+
+  function renderPersonalTasks(tasks) {
+    const hint = document.getElementById("ovTasksHint");
+    const list = document.getElementById("ovTasksList");
+
+    const pending = tasks
+      .filter((t) => t.status.trim().toLowerCase() !== "completed")
+      .sort((a, b) => {
+        if (a.deadline && b.deadline) return a.deadline.getTime() - b.deadline.getTime();
+        if (a.deadline) return -1;
+        if (b.deadline) return 1;
+        return 0;
+      });
+
+    hint.textContent = pending.length ? `${pending.length} pending` : "";
+
+    if (!pending.length) {
+      list.innerHTML = `<p class="ov-empty-hint">No pending tasks — you're all caught up.</p>`;
+      return;
+    }
+
+    const shown = pending.slice(0, 8);
+    list.innerHTML = shown
+      .map((task) => {
+        const { text: deadlineText, overdue } = taskDeadlineLabel(task);
+        const link = task.relatedLinks
+          ? `<a class="ov-task-link" href="${task.relatedLinks}" target="_blank" rel="noopener">${Icons.svg("arrow-up-right", { size: 11 })} Link</a>`
+          : "";
+        return `
+        <div class="ov-task-row${overdue ? " overdue" : ""}">
+          <span class="ov-task-icon">${Icons.svg("check", { size: 15 })}</span>
+          <span class="ov-task-info">
+            <div class="ov-task-desc">${task.description || "(untitled task)"}</div>
+            <div class="ov-task-meta">${task.category ? `<span class="ov-task-tag">${task.category}</span>` : ""}${link}</div>
+          </span>
+          <span class="ov-task-deadline">${deadlineText}</span>
+        </div>`;
+      })
+      .join("") + (pending.length > shown.length ? `<p class="ov-empty-hint">+${pending.length - shown.length} more pending</p>` : "");
+  }
+
+  async function initPersonalTasksWidget() {
+    const list = document.getElementById("ovTasksList");
+    const hint = document.getElementById("ovTasksHint");
+    list.innerHTML = `<div class="ov-skeleton" style="height:60px;"></div>`;
+    try {
+      const { tasks } = await SheetsClient.fetchPersonalTasks();
+      renderPersonalTasks(tasks);
+    } catch (err) {
+      console.error("[Overview] Failed to load personal tasks:", err);
+      hint.textContent = "";
+      const needsScope = err.code === "NEEDS_SHEETS_SCOPE";
+      list.innerHTML = `
+        <div class="ov-reconnect">
+          <p>${needsScope ? "This dashboard needs permission to read your task sheet." : "Couldn't load your tasks right now."}</p>
+          ${err.message ? `<p class="ov-reconnect-detail">${err.message}</p>` : ""}
+          <button type="button" id="ovTasksReconnect">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+        </div>`;
+      document.getElementById("ovTasksReconnect").addEventListener("click", async (e) => {
+        if (!needsScope) {
+          initPersonalTasksWidget();
+          return;
+        }
+        e.target.disabled = true;
+        e.target.textContent = "Connecting…";
+        const oldMsg = list.querySelector(".reauth-fail-msg");
+        if (oldMsg) oldMsg.remove();
+        try {
+          await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+          initPersonalTasksWidget();
+        } catch (err2) {
+          e.target.disabled = false;
+          e.target.textContent = "Connect Google Sheets";
+          e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${err2.message}</p>`);
+        }
+      });
+    }
+  }
+
+  // ---------------- AI insights (rule-based, from real numbers — no LLM call) ----------------
+
+  function renderInsights(records, kpis) {
+    const insights = [];
+    const { start, end } = DataStore.goalPeriodRange("weekly");
+    const daysLeft = Math.max(1, Math.ceil((end.getTime() - Date.now()) / 86400000));
+    const totalDays = Math.max(1, Math.round((end - start) / 86400000));
+    const elapsedDays = Math.max(0, totalDays - daysLeft);
+    const expectedPct = Math.min(100, Math.round((elapsedDays / totalDays) * 100));
+
+    // 1. Pace toward this week's calls goal — uses the user's own "calls"
+    // goal for this week if they have one (the seeded default or a custom
+    // one), same as the ring in the Goals & Progress card above.
+    const weeklyCallsGoal = Goals.getAll().find((g) => g.metric === "calls" && g.period === "week");
+    const callsGoal = weeklyCallsGoal ? Number(weeklyCallsGoal.target) || 0 : 0;
+    if (callsGoal) {
+      const progress = DataStore.goalProgress(records, "weekly").calls;
+      const pctDone = Math.round((progress / callsGoal) * 100);
+      if (pctDone >= expectedPct) {
+        insights.push({ tone: "green", icon: "trending-up", html: `On pace for this week's calls goal — <strong>${progress}/${callsGoal}</strong> made so far.` });
+      } else {
+        const remaining = Math.max(0, callsGoal - progress);
+        const dailyTarget = Math.ceil(remaining / daysLeft);
+        insights.push({ tone: "red", icon: "phone-call", html: `Behind pace on this week's calls goal — <strong>${dailyTarget}/day</strong> for the next ${daysLeft} day${daysLeft === 1 ? "" : "s"} keeps it reachable.` });
+      }
+    }
+
+    // 2. Vertical needing the most attention this week (lowest applications vs. the average).
+    const weeklyStats = DataStore.VERTICALS.map((v) => {
+      const inWeek = records.filter((r) => r.dateContacted && r.dateContacted >= start && r.dateContacted < end && DataStore.verticalsOf(r).includes(v.key));
+      return { label: v.label, applied: inWeek.filter((r) => StatusSettings.classify(r.status) === "applied").length };
+    });
+    const avgApplied = weeklyStats.reduce((s, v) => s + v.applied, 0) / (weeklyStats.length || 1);
+    const lowest = weeklyStats.slice().sort((a, b) => a.applied - b.applied)[0];
+    if (lowest && avgApplied > 0 && lowest.applied < avgApplied * 0.5) {
+      insights.push({ tone: "red", icon: "trending-down", html: `<strong>${lowest.label}</strong> has the fewest applications this week (${lowest.applied} vs a ${avgApplied.toFixed(1)} average across verticals) — may need more calls.` });
+    }
+
+    // 3. Follow-up backlog.
+    const urgentCount = records.filter((r) => {
+      if (StatusSettings.classify(r.status) !== "followUp" || !r.dateContacted) return false;
+      const days = Math.floor((Date.now() - r.dateContacted.getTime()) / 86400000);
+      return days >= 7;
+    }).length;
+    if (urgentCount > 0) {
+      insights.push({ tone: "red", icon: "clock", html: `<strong>${urgentCount}</strong> follow-up lead${urgentCount === 1 ? "" : "s"} waiting 7+ days — worth prioritizing today.` });
+    }
+
+    const container = document.getElementById("ovInsights");
+    if (!insights.length) {
+      container.innerHTML = `<p class="ov-empty-hint">Nothing needs your attention right now.</p>`;
+      return;
+    }
+    container.innerHTML = insights
+      .slice(0, 3)
+      .map((i) => `
+        <div class="ov-insight-row ov-insight-tone-${i.tone}">
+          <span class="ov-insight-icon">${Icons.svg(i.icon, { size: 15 })}</span>
+          <span class="ov-insight-text">${i.html}</span>
+        </div>`)
+      .join("");
+  }
+
+  /* ============================================================
+     Bootstrap — runs last, after every function/const above it has
+     been defined, since initOverviewData() (triggered here) reaches
+     for refreshBtn and the render* functions right away.
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    // Non-fatal: if this fails (e.g. accounts.google.com unreachable), the
+    // page still works off the cached token from sign-in — it just won't
+    // be able to silently renew it once that expires. See auth.js's
+    // ensureToken() and the <script> tag for this in <head>.
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Overview] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "overview", root: ".." });
+    initOverviewCalendarWidget();
+    initPersonalTasksWidget();
+    renderChatPreview();
+    initOverviewData();
+  }
+</script>
+
+</body>
+</html>

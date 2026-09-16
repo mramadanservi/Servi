@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Team</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Team</h1>
+      <p class="page-subheading">Who's on the team, what's on their plate, and who's leading the board.</p>
+    </div>
+    <div class="ov-header-actions">
+      <span class="ov-updated-at" id="teamUpdatedAt"></span>
+      <button type="button" class="ov-refresh-btn" id="teamRefreshBtn"></button>
+    </div>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2>Tasks</h2>
+      <span class="ov-hint" id="teamTasksHint">Summed across every team tracker sheet this dashboard currently has access to</span>
+    </div>
+    <div class="ov-kpi-row cols-3" id="teamTasksKpiRow">
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+    </div>
+  </section>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2>Performance</h2>
+      <span class="ov-hint">From the general recruitment sheet — same numbers as Leads/Calls</span>
+    </div>
+    <div class="ov-kpi-row cols-3" id="teamPerfKpiRow">
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+    </div>
+  </section>
+
+  <section class="ov-card leads-filter-card" id="teamFilterCard">
+    <div class="ov-card-header">
+      <h2>Filter</h2>
+      <span class="ov-hint">Applies to the Tasks &amp; Performance numbers above</span>
+    </div>
+    <div class="leads-filter-bar">
+      <div class="leads-filter-presets" id="teamDatePresets">
+        <button type="button" data-preset="all" class="active">All Time</button>
+        <button type="button" data-preset="today">Today</button>
+        <button type="button" data-preset="yesterday">Yesterday</button>
+        <button type="button" data-preset="week">This Week</button>
+        <button type="button" data-preset="month">This Month</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="team-layout">
+    <div class="team-main">
+      <section class="ov-card" id="teamMemberCard">
+        <div class="ov-card-header">
+          <h2>Team Members</h2>
+          <span class="ov-hint" id="teamMemberHint"></span>
+        </div>
+        <div class="team-member-list" id="teamMemberList">
+          <div class="ov-skeleton" style="height:78px;"></div>
+          <div class="ov-skeleton" style="height:78px;"></div>
+          <div class="ov-skeleton" style="height:78px;"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="team-side">
+      <section class="ov-card" id="teamScheduleCard">
+        <div class="ov-card-header"><h2 id="teamScheduleTitle">Upcoming Scheduled</h2></div>
+        <div class="team-schedule-nav">
+          <span class="team-schedule-month" id="teamScheduleMonth"></span>
+          <div class="team-schedule-nav-btns">
+            <button type="button" id="teamSchedulePrev" aria-label="Previous days"></button>
+            <button type="button" id="teamScheduleNext" aria-label="Next days"></button>
+          </div>
+        </div>
+        <div class="team-schedule-strip" id="teamScheduleStrip"></div>
+        <div class="team-schedule-toggle" id="teamScheduleToggle">
+          <button type="button" data-view="meeting" class="active">Meeting</button>
+          <button type="button" data-view="task">Task</button>
+        </div>
+        <div class="team-schedule-list" id="teamScheduleList"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>General Chatroom</h2>
+          <a class="cal-widget-link" href="chat.html">Open chat</a>
+        </div>
+        <div class="ov-chat-preview" id="teamChatPreview"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/statusSettings.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/areaSettings.js"></script>
+<script src="../shared/team.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/teamTasksConfig.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     Team page
+     ------------------------------------------------------------
+     Three independent data sources, fetched together but rendered
+     independently (a problem with one never blanks the other two):
+       1. Servi_Team roster sheet (SheetsClient.fetchTeamRoster()) —
+          who's on the team, their contact info, and their photo.
+       2. The general recruitment sheet (SheetsClient.fetchAll()) —
+          Top Caller / Most Leads Added, same data Leads/Calls use.
+       3. Every team member's OWN personal task-tracker sheet that
+          this project actually has a real spreadsheet ID for (see
+          shared/teamTasksConfig.js) — Active/Critical/Overdue/Most
+          Completed tasks are summed across whichever of those are
+          configured. As of this build that's exactly one real sheet
+          (Mohamad Ramadan's) — see teamTasksConfig.js's header
+          comment for why, and the user's own explicit instruction
+          that this is fine for now ("if you are having problems
+          with total tasks, overdue and critical, you can for now
+          add the tasks the signed in user has access to").
+
+     Judgment calls worth flagging:
+       - "Critical Tasks" isn't a real column in the tracker sheet —
+         see taskSheet.js's isCritical() for the exact definition
+         (not completed, AND high priority or "at risk" status).
+       - The filter bar's date presets narrow the Tasks/Performance
+         KPI rows (a task counts if its request/deadline/completion
+         date falls in the window; a recruitment record counts by
+         its "Date Contacted", same as Leads/Calls). The employee
+         list and the calendar/chatroom side panel are NOT affected
+         by this filter — they're always "right now" views, same
+         spirit as Leads' filter never touching its all-time vertical
+         grid.
+       - "All Time" was added as a 5th preset alongside the 4 the
+         user named (Today/Yesterday/This Week/This Month) so this
+         filter bar matches every other tab's (which all default to
+         an "All Time" first option) — flagged in case a no-default
+         filter was actually intended instead.
+       - KB (Khalil Badran) is identified by name match (not
+         assuming a fixed ID/row position) and is always pinned to
+         the top of the member list with a gold "Co-Founder" badge,
+         regardless of whatever order the sheet itself lists people in.
+     ============================================================ */
+
+  function initTeamPage() {
+    document.getElementById("teamSchedulePrev").innerHTML = Icons.svg("chevron-left", { size: 15 });
+    document.getElementById("teamScheduleNext").innerHTML = Icons.svg("chevron-right", { size: 15 });
+
+    const refreshBtn = document.getElementById("teamRefreshBtn");
+    refreshBtn.innerHTML = `${Icons.svg("clock", { size: 15 })}<span>Refresh</span>`;
+    refreshBtn.addEventListener("click", () => loadTeamPage());
+
+    wireFilterBar();
+    wireScheduleWidget();
+    renderChatPreview();
+    loadTeamPage();
+  }
+
+  /* ============================================================
+     Filter state
+     ============================================================ */
+
+  const teamFilters = { preset: "all" };
+
+  function datePresetRange(preset) {
+    const { startOfDay, startOfWeek, startOfMonth, addDays, addMonths } = DataStore._dateHelpers;
+    const now = new Date();
+    if (preset === "today") return { start: startOfDay(now), end: addDays(startOfDay(now), 1) };
+    if (preset === "yesterday") {
+      const y = addDays(startOfDay(now), -1);
+      return { start: y, end: addDays(y, 1) };
+    }
+    if (preset === "week") return { start: startOfWeek(now), end: addDays(startOfWeek(now), 7) };
+    if (preset === "month") return { start: startOfMonth(now), end: addMonths(startOfMonth(now), 1) };
+    return { start: null, end: null };
+  }
+
+  function wireFilterBar() {
+    document.getElementById("teamDatePresets").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-preset]");
+      if (!btn) return;
+      teamFilters.preset = btn.dataset.preset;
+      document.querySelectorAll("#teamDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderKpiRows();
+    });
+  }
+
+  /* ============================================================
+     Data loading — three independent sources, Promise.allSettled so
+     one failing never blanks the other two.
+     ============================================================ */
+
+  const teamState = { roster: [], records: [], tasksByMember: {} };
+
+  async function loadTeamPage() {
+    document.getElementById("teamRefreshBtn").classList.add("spinning");
+    document.getElementById("teamTasksKpiRow").innerHTML = `
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>`;
+    document.getElementById("teamPerfKpiRow").innerHTML = `
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>`;
+    document.getElementById("teamMemberList").innerHTML = `
+      <div class="ov-skeleton" style="height:78px;"></div>
+      <div class="ov-skeleton" style="height:78px;"></div>
+      <div class="ov-skeleton" style="height:78px;"></div>`;
+
+    const [rosterRes, recordsRes, tasksRes] = await Promise.allSettled([
+      SheetsClient.fetchTeamRoster(),
+      SheetsClient.fetchAll(),
+      loadAllMemberTasks(),
+    ]);
+
+    if (rosterRes.status === "fulfilled") {
+      teamState.roster = rosterRes.value.members;
+      renderMemberList(teamState.roster, null);
+    } else {
+      teamState.roster = [];
+      renderMemberList([], rosterRes.reason);
+    }
+
+    if (recordsRes.status === "fulfilled") {
+      teamState.records = recordsRes.value.records;
+      DataStore.setRecords(teamState.records);
+      teamState.perfError = null;
+    } else {
+      teamState.records = [];
+      teamState.perfError = recordsRes.reason;
+    }
+
+    if (tasksRes.status === "fulfilled") {
+      teamState.tasksByMember = tasksRes.value.tasksByMember;
+      teamState.tasksErrors = tasksRes.value.errors;
+    } else {
+      teamState.tasksByMember = {};
+      teamState.tasksErrors = [{ id: null, error: tasksRes.reason }];
+    }
+
+    renderKpiRows();
+    document.getElementById("teamRefreshBtn").classList.remove("spinning");
+    document.getElementById("teamUpdatedAt").textContent =
+      "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+    initScheduleWidget();
+  }
+
+  // Fetches every member's personal tracker sheet that's actually
+  // configured in TeamTasksConfig.MEMBER_SHEETS (today, just one — see
+  // that file's header comment). Never invents data for anyone else.
+  async function loadAllMemberTasks() {
+    const entries = Object.entries(TeamTasksConfig.MEMBER_SHEETS || {});
+    const tasksByMember = {};
+    const errors = [];
+    await Promise.all(
+      entries.map(async ([memberId, config]) => {
+        try {
+          const { tasks } = await SheetsClient.fetchTasksFromConfig(config);
+          tasksByMember[memberId] = tasks;
+        } catch (err) {
+          errors.push({ id: memberId, error: err });
+        }
+      })
+    );
+    return { tasksByMember, errors };
+  }
+
+  function allConnectedTasks() {
+    return Object.values(teamState.tasksByMember || {}).flat();
+  }
+
+  /* ============================================================
+     KPI rows
+     ============================================================ */
+
+  function renderKpiRows() {
+    renderTasksKpiRow();
+    renderPerfKpiRow();
+  }
+
+  function renderTasksKpiRow() {
+    const row = document.getElementById("teamTasksKpiRow");
+    const hint = document.getElementById("teamTasksHint");
+    const configuredCount = Object.keys(TeamTasksConfig.MEMBER_SHEETS || {}).length;
+    const connectedCount = Object.keys(teamState.tasksByMember || {}).length;
+    const errorCount = (teamState.tasksErrors || []).length;
+
+    if (configuredCount === 0) {
+      row.innerHTML = `<div class="ov-reconnect" style="grid-column: 1 / -1;"><p>No team member has a personal task-tracker sheet configured yet.</p></div>`;
+      return;
+    }
+    if (connectedCount === 0) {
+      row.innerHTML = `<div class="ov-reconnect" style="grid-column: 1 / -1;">
+        <p>Couldn't load any team member's task tracker right now.</p>
+        <button type="button" id="teamTasksReconnect">Try again</button>
+      </div>`;
+      document.getElementById("teamTasksReconnect").addEventListener("click", loadTeamPage);
+      return;
+    }
+
+    hint.textContent = errorCount
+      ? `${connectedCount} of ${configuredCount} team tracker sheet(s) loaded — ${errorCount} couldn't be reached`
+      : `Summed across ${connectedCount} team tracker sheet${connectedCount === 1 ? "" : "s"} this dashboard currently has access to`;
+
+    const { start, end } = datePresetRange(teamFilters.preset);
+    const inRange = (t) => TaskSheet.fallsInRange(t, start, end);
+    const all = allConnectedTasks().filter(inRange);
+
+    const active = all.filter(TaskSheet.isActive).length;
+    const critical = all.filter(TaskSheet.isCritical).length;
+    const overdue = all.filter(TaskSheet.isOverdue).length;
+
+    const cards = [
+      { tone: "leads", icon: "list-checks", value: active, label: "Active Tasks", sub: "Not yet completed" },
+      { tone: "red", icon: "trending-down", value: critical, label: "Critical Tasks", sub: "High priority or at risk" },
+      { tone: "calls", icon: "clock", value: overdue, label: "Overdue Tasks", sub: "Past deadline, not done" },
+    ];
+    row.innerHTML = cards.map(kpiCardHtml).join("");
+  }
+
+  function renderPerfKpiRow() {
+    const row = document.getElementById("teamPerfKpiRow");
+    if (teamState.perfError) {
+      const needsScope = teamState.perfError.code === "NEEDS_SHEETS_SCOPE";
+      row.innerHTML = `<div class="ov-reconnect" style="grid-column: 1 / -1;">
+        <p>${needsScope ? "This dashboard needs permission to read your Google Sheet." : "Couldn't load recruitment data right now."}</p>
+        <button type="button" id="teamPerfReconnect">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+      </div>`;
+      document.getElementById("teamPerfReconnect").addEventListener("click", async (e) => {
+        if (teamState.perfError.code !== "NEEDS_SHEETS_SCOPE") { loadTeamPage(); return; }
+        e.target.disabled = true;
+        e.target.textContent = "Connecting…";
+        try {
+          await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+          loadTeamPage();
+        } catch (err2) {
+          e.target.disabled = false;
+          e.target.textContent = "Connect Google Sheets";
+          e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${err2.message}</p>`);
+        }
+      });
+      return;
+    }
+
+    const { start, end } = datePresetRange(teamFilters.preset);
+    const records = teamState.records.filter((r) => {
+      if (!start) return true;
+      return !!r.dateContacted && r.dateContacted >= start && r.dateContacted < end;
+    });
+
+    // Top Caller — same math as Leads/Overview's "Top Callers" panel.
+    const callers = Team.getCallers(records).map((name) => ({ name, m: Team.metricsFor(records, name) }));
+    callers.sort((a, b) => b.m.callsMade - a.m.callsMade);
+    const topCaller = callers[0];
+
+    // Most Leads Added — group by "Added By".
+    const addedCounts = new Map();
+    records.forEach((r) => {
+      if (!r.addedBy) return;
+      addedCounts.set(r.addedBy, (addedCounts.get(r.addedBy) || 0) + 1);
+    });
+    const addedSorted = Array.from(addedCounts.entries()).sort((a, b) => b[1] - a[1]);
+    const topAdder = addedSorted[0];
+
+    // Most Tasks Completed — compare completed-task counts across every
+    // connected personal tracker sheet (see loadAllMemberTasks above).
+    const { start: tStart, end: tEnd } = datePresetRange(teamFilters.preset);
+    let topCompleter = null;
+    Object.entries(teamState.tasksByMember || {}).forEach(([memberId, tasks]) => {
+      const completed = tasks.filter((t) => TaskSheet.isCompleted(t) && TaskSheet.fallsInRange(t, tStart, tEnd)).length;
+      if (!topCompleter || completed > topCompleter.completed) {
+        const member = teamState.roster.find((m) => m.id === memberId);
+        topCompleter = { name: member ? member.fullName : `Member ${memberId}`, completed };
+      }
+    });
+
+    const cards = [
+      {
+        tone: "teal", icon: "phone-call",
+        value: topCaller ? topCaller.name : "—",
+        label: topCaller ? `Top Caller · ${topCaller.m.callsMade} call${topCaller.m.callsMade === 1 ? "" : "s"}` : "Top Caller · no calls yet",
+        isText: true,
+      },
+      {
+        tone: "indigo", icon: "users",
+        value: topAdder ? topAdder[0] : "—",
+        label: topAdder ? `Most Leads Added · ${topAdder[1]} lead${topAdder[1] === 1 ? "" : "s"}` : "Most Leads Added · no data yet",
+        isText: true,
+      },
+      {
+        tone: "applied", icon: "check",
+        value: topCompleter && topCompleter.completed > 0 ? topCompleter.name : "—",
+        label: topCompleter && topCompleter.completed > 0 ? `Most Tasks Completed · ${topCompleter.completed}` : "Most Tasks Completed · no data yet",
+        isText: true,
+      },
+    ];
+    row.innerHTML = cards.map(kpiCardHtml).join("");
+  }
+
+  function kpiCardHtml(c) {
+    return `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top">
+          <div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div>
+        </div>
+        <div class="ov-kpi-value${c.isText ? " kpi-value-text" : ""}">${typeof c.value === "number" ? c.value.toLocaleString() : escapeHtml(c.value)}</div>
+        <div class="ov-kpi-label">${c.label}</div>
+      </div>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  }
+
+  /* ============================================================
+     Employee list — KB always pinned to the top with a gold badge,
+     everyone else in whatever order the sheet lists them.
+     ============================================================ */
+
+  function isKB(member) {
+    const first = (member.firstName || "").trim().toLowerCase();
+    const last = (member.lastName || "").trim().toLowerCase();
+    const position = (member.position || "").trim().toLowerCase();
+    return (first === "khalil" && last === "badran") || /co.?founder/.test(position);
+  }
+
+  function initialsFor(member) {
+    const f = (member.firstName || "").trim();
+    const l = (member.lastName || "").trim();
+    return ((f[0] || "") + (l[0] || "")).toUpperCase() || "?";
+  }
+
+  // Accepts a real http(s) URL OR a data: image URI — the latter is how a
+  // photo uploaded via Settings > Profile Settings gets stored (Sheets
+  // cells can't hold binary/files, so an uploaded photo is compressed
+  // client-side into a small data: URI string instead — see settings.html).
+  function looksLikeUrl(s) {
+    return /^(https?:\/\/|data:image\/)/i.test(String(s || "").trim());
+  }
+
+  function memberCardHtml(member) {
+    const founder = isKB(member);
+    const avatar = looksLikeUrl(member.image)
+      ? `<img src="${escapeHtml(member.image)}" alt="" />`
+      : (founder ? Icons.svg("crown", { size: 20 }) : initialsFor(member));
+    return `
+      <div class="team-member-card${founder ? " is-founder" : ""}">
+        <div class="team-member-avatar">${avatar}</div>
+        <div class="team-member-info">
+          <div class="team-member-name-row">
+            <span class="team-member-name">${escapeHtml(member.fullName)}</span>
+            ${founder ? `<span class="team-founder-badge">${Icons.svg("crown", { size: 11 })}Co-Founder</span>` : ""}
+          </div>
+          <div class="team-member-position">${escapeHtml(member.position || "—")}</div>
+          <div class="team-member-contact">
+            ${member.email ? `<span>${Icons.svg("inbox", { size: 12 })}${escapeHtml(member.email)}</span>` : ""}
+            ${member.phone ? `<span>${Icons.svg("phone", { size: 12 })}${escapeHtml(member.phone)}</span>` : ""}
+          </div>
+        </div>
+        <span class="team-member-id">${escapeHtml(member.id || "")}</span>
+      </div>`;
+  }
+
+  function renderMemberList(members, error) {
+    const list = document.getElementById("teamMemberList");
+    const hint = document.getElementById("teamMemberHint");
+
+    if (error) {
+      const needsScope = error.code === "NEEDS_SHEETS_SCOPE";
+      hint.textContent = "";
+      list.innerHTML = `
+        <div class="team-member-error">
+          <p>${needsScope ? "This dashboard needs permission to read the Servi_Team sheet." : "Couldn't load the team roster right now."}</p>
+          ${error.message ? `<p class="ov-reconnect-detail">${escapeHtml(error.message)}</p>` : ""}
+          <button type="button" id="teamMemberReconnect" style="margin-top:10px;">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+        </div>`;
+      document.getElementById("teamMemberReconnect").addEventListener("click", async (e) => {
+        if (!needsScope) { loadTeamPage(); return; }
+        e.target.disabled = true;
+        e.target.textContent = "Connecting…";
+        try {
+          await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+          loadTeamPage();
+        } catch (err2) {
+          e.target.disabled = false;
+          e.target.textContent = "Connect Google Sheets";
+        }
+      });
+      return;
+    }
+
+    if (!members.length) {
+      hint.textContent = "";
+      list.innerHTML = `<div class="team-member-empty">No team members found in the Servi_Team sheet yet.</div>`;
+      return;
+    }
+
+    hint.textContent = `${members.length} team member${members.length === 1 ? "" : "s"}`;
+    const sorted = members.slice().sort((a, b) => {
+      const aKB = isKB(a), bKB = isKB(b);
+      if (aKB && !bKB) return -1;
+      if (bKB && !aKB) return 1;
+      return 0; // stable — keep sheet order otherwise
+    });
+    list.innerHTML = sorted.map(memberCardHtml).join("");
+  }
+
+  /* ============================================================
+     General Chatroom preview — same placeholder pattern as
+     overview.html's #ovChatPreview (see that file's header comment:
+     chat.html has no real backend yet, so this shows clearly-generic
+     sample activity rather than inventing specific people/messages).
+     ============================================================ */
+
+  const SAMPLE_CHAT_ACTIVITY = [
+    { icon: "message-circle", text: "New message posted in the General Chatroom.", time: "2m ago" },
+    { icon: "users", text: "A teammate shared an update in the group chat.", time: "26m ago" },
+    { icon: "message-square-plus", text: "Someone replied in the General Chatroom.", time: "1h ago" },
+  ];
+
+  function renderChatPreview() {
+    document.getElementById("teamChatPreview").innerHTML = SAMPLE_CHAT_ACTIVITY.map(
+      (item) => `
+      <div class="ov-chat-row">
+        <span class="ov-chat-icon">${Icons.svg(item.icon, { size: 15 })}</span>
+        <span class="ov-chat-info">
+          <div class="ov-chat-text">${item.text}</div>
+          <div class="ov-chat-time">${item.time}</div>
+        </span>
+      </div>`
+    ).join("");
+  }
+
+  /* ============================================================
+     "Upcoming Scheduled" — compact calendar widget (new design, no
+     direct precedent existed for this — see file header). A 5-day
+     strip you can page through with the arrows; the selected day's
+     Google Calendar events show under "Meeting", that day's personal
+     tracker tasks (due that day, across every connected tracker
+     sheet) show under "Task".
+     ============================================================ */
+
+  const scheduleState = { anchor: new Date(), selected: new Date(), view: "meeting" };
+
+  function sameDay(a, b) {
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  }
+
+  function renderScheduleStrip() {
+    const strip = document.getElementById("teamScheduleStrip");
+    const days = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(scheduleState.anchor);
+      d.setDate(d.getDate() + i);
+      days.push(d);
+    }
+    document.getElementById("teamScheduleMonth").textContent = days[0].toLocaleDateString([], { month: "long", year: "numeric" });
+    strip.innerHTML = days
+      .map((d, i) => `
+        <div class="team-schedule-day${sameDay(d, scheduleState.selected) ? " selected" : ""}" data-idx="${i}">
+          <span class="team-schedule-day-dow">${d.toLocaleDateString([], { weekday: "short" })}</span>
+          <span class="team-schedule-day-dom">${d.getDate()}</span>
+        </div>`)
+      .join("");
+    strip.querySelectorAll(".team-schedule-day").forEach((el, i) => {
+      el.addEventListener("click", () => {
+        scheduleState.selected = days[i];
+        renderScheduleStrip();
+        renderScheduleList();
+      });
+    });
+  }
+
+  async function renderScheduleList() {
+    const list = document.getElementById("teamScheduleList");
+    list.innerHTML = `<div class="ov-skeleton" style="height:40px;"></div>`;
+
+    if (scheduleState.view === "task") {
+      const dayStart = new Date(scheduleState.selected); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+      const due = allConnectedTasks().filter((t) => t.deadline && t.deadline >= dayStart && t.deadline < dayEnd);
+      if (!due.length) {
+        list.innerHTML = `<p class="team-schedule-empty">No tracked tasks due this day.</p>`;
+        return;
+      }
+      list.innerHTML = due.map((t) => `
+        <div class="cal-event-row">
+          <div class="cal-event-info">
+            <div class="cal-event-title">${escapeHtml(t.description || "(untitled task)")}</div>
+            <div class="cal-event-meta">${escapeHtml(t.category || "Task")}${t.priority ? " · " + escapeHtml(t.priority) : ""}</div>
+          </div>
+        </div>`).join("");
+      return;
+    }
+
+    // Meeting view — Google Calendar events for the selected day.
+    try {
+      const dayStart = new Date(scheduleState.selected); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+      const events = await CalendarAPI.listEvents({ timeMin: dayStart, timeMax: dayEnd, maxResults: 20 });
+      if (!events.length) {
+        list.innerHTML = `<p class="team-schedule-empty">Nothing on the calendar this day.</p>`;
+        return;
+      }
+      list.innerHTML = events.map((ev) => `
+        <div class="cal-event-row">
+          <div class="cal-event-info">
+            <div class="cal-event-title">${escapeHtml(ev.title)}</div>
+            <div class="cal-event-meta">${ev.allDay ? "All day" : ev.start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}${ev.location ? " · " + escapeHtml(ev.location) : ""}</div>
+          </div>
+        </div>`).join("");
+    } catch (err) {
+      if (err.code === "NEEDS_CALENDAR_SCOPE") {
+        list.innerHTML = `<p class="team-schedule-empty">Connect Google Calendar (Settings) to see meetings here.</p>`;
+      } else {
+        list.innerHTML = `<p class="team-schedule-empty">Couldn't load the calendar right now.</p>`;
+      }
+    }
+  }
+
+  function wireScheduleWidget() {
+    document.getElementById("teamSchedulePrev").addEventListener("click", () => {
+      scheduleState.anchor.setDate(scheduleState.anchor.getDate() - 5);
+      renderScheduleStrip();
+    });
+    document.getElementById("teamScheduleNext").addEventListener("click", () => {
+      scheduleState.anchor.setDate(scheduleState.anchor.getDate() + 5);
+      renderScheduleStrip();
+    });
+    document.getElementById("teamScheduleToggle").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-view]");
+      if (!btn) return;
+      scheduleState.view = btn.dataset.view;
+      document.querySelectorAll("#teamScheduleToggle button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderScheduleList();
+    });
+  }
+
+  function initScheduleWidget() {
+    renderScheduleStrip();
+    renderScheduleList();
+  }
+
+  /* ============================================================
+     Bootstrap
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Team] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "team", root: ".." });
+    initTeamPage();
+  }
+</script>
+
+</body>
+</html>

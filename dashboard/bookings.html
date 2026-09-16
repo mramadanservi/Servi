@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Bookings</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Bookings</h1>
+      <p class="page-subheading">Every manually-arranged booking — client, freelancer, session details, and status.</p>
+    </div>
+    <div class="ov-header-actions">
+      <span class="ov-updated-at" id="bkUpdatedAt"></span>
+      <button type="button" class="ov-refresh-btn" id="bkRefreshBtn"></button>
+    </div>
+  </div>
+
+  <section class="ov-card" id="bkKpiCard1">
+    <div class="ov-card-header">
+      <h2>Bookings</h2>
+      <span class="ov-hint">All-time · not affected by filters below</span>
+    </div>
+    <div class="ov-kpi-row cols-3" id="bkKpiRow1">
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+    </div>
+  </section>
+
+  <section class="ov-card" id="bkKpiCard2" hidden>
+    <div class="ov-card-header">
+      <h2>Value</h2>
+      <span class="ov-hint">All-time · not affected by filters below</span>
+    </div>
+    <div class="ov-kpi-row cols-3" id="bkKpiRow2"></div>
+    <div class="bk-commission-box">
+      <span class="bk-commission-icon" id="bkCommissionIcon"></span>
+      <div class="bk-commission-text">
+        <div class="bk-commission-label">Platform Commission Rate</div>
+        <div class="bk-commission-sub">Revenue = each booking's price × this rate, summed. Provider Payout = GMV − Revenue. Saved on this device.</div>
+      </div>
+      <div class="bk-commission-input-wrap">
+        <input type="number" min="0" max="100" step="0.5" class="bk-commission-input" id="bkCommissionInput" />
+        <span>%</span>
+        <button type="button" class="modal-btn primary" id="bkCommissionSaveBtn" style="padding:7px 14px;">Save</button>
+      </div>
+      <span class="modal-status" id="bkCommissionStatus"></span>
+    </div>
+  </section>
+
+  <section class="ov-card leads-filter-card" id="bkFilterCard" hidden>
+    <div class="ov-card-header">
+      <h2 data-i18n="Filter">Filter</h2>
+      <span class="ov-hint">Applies to the booking list and the "Booked Sessions" numbers on the right — never the KPI rows above or the per-vertical averages</span>
+    </div>
+    <div class="leads-filter-bar">
+      <div class="leads-filter-presets" id="bkDatePresets">
+        <button type="button" data-preset="all" class="active">All Time</button>
+        <button type="button" data-preset="yesterday">Yesterday</button>
+        <button type="button" data-preset="today">Today</button>
+        <button type="button" data-preset="week">This Week</button>
+        <button type="button" data-preset="month">This Month</button>
+        <button type="button" data-preset="custom" id="bkCustomRangeBtn" class="drp-trigger-btn">Custom Range</button>
+      </div>
+      <div class="leads-filter-selects">
+        <label class="leads-select-wrap">
+          <span class="leads-select-label">Status</span>
+          <select id="bkStatusSelect">
+            <option value="">All</option>
+            <option value="Scheduled">Scheduled</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
+            <option value="Rebooked">Rebooked</option>
+          </select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label">Vertical</span>
+          <select id="bkVerticalSelect"><option value="">All</option></select>
+        </label>
+        <label class="leads-select-wrap">
+          <span class="leads-select-label">District</span>
+          <select id="bkDistrictSelect"><option value="">All</option></select>
+        </label>
+        <button type="button" class="leads-clear-btn" id="bkClearFiltersBtn">Clear filters</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="ov-layout" id="bkLayout" hidden>
+    <div class="ov-main">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Booking Cards</h2>
+          <span class="ov-hint" id="bkListHint"></span>
+        </div>
+        <div class="bk-list" id="bkList"></div>
+      </section>
+    </div>
+
+    <div class="ov-side">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Bookings by Vertical</h2>
+          <span class="ov-hint">Top number: booked sessions (filtered) · bottom: avg session value (all-time)</span>
+        </div>
+        <div class="ov-vertical-grid side-vertical-grid" id="bkVerticalGrid"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header"><h2>Repeat &amp; Rating</h2></div>
+        <div class="bk-stat-list" id="bkStatList"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="bkInsights"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dateRangePicker.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/statusSettings.js"></script>
+<script src="../shared/goals.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/areaSettings.js"></script>
+<script src="../shared/phoneFormat.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     Bookings page
+     ------------------------------------------------------------
+     Reads/writes a FOURTH, separate Google Sheet (the "Client_Booking"
+     spreadsheet you created and shared — see ClientConfig/BookingsConfig
+     in sheetsConfig.js) — not the recruitment sheet Leads/Calls/Overview
+     use, and not the Fillout "From Fillout" sheet Applied uses. Bookings
+     themselves are only ever CREATED from the Applied page's "Book"
+     button (see applied.html's openBookModal) — this page reads that
+     same sheet back, plus lets staff edit Price/Date&Time (Duration is
+     derived from Date+End Time, never typed directly — "automatically
+     calculated" per your spec), Rating, and Review on an existing
+     booking, and change its Status or Rebook it.
+
+     Rating/Review judgment call, flagged: your spec says only "the
+     prices and date and time" are editable after creation, but also
+     describes asking clients for a rating/review once the session is
+     done — with no other screen anywhere in this project to enter those,
+     they're editable here too (in the same detail panel) so the Avg
+     Rating stat on the right has somewhere to get real data from. Happy
+     to move or remove that if you'd rather lock it down to exactly
+     price/date/time.
+     ============================================================ */
+
+  let bkBookings = [];
+
+  const COMMISSION_STORAGE_KEY = "servi_v2_booking_commission_rate";
+  function getCommissionRate() {
+    const raw = localStorage.getItem(COMMISSION_STORAGE_KEY);
+    const n = raw === null ? 0 : Number(raw);
+    return isNaN(n) ? 0 : Math.max(0, Math.min(100, n));
+  }
+  function setCommissionRate(n) {
+    localStorage.setItem(COMMISSION_STORAGE_KEY, String(n));
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function fullClientName(b) { return `${b.clientFirstName} ${b.clientLastName}`.trim() || "—"; }
+  function fullFreelancerName(b) { return `${b.freelancerFirstName} ${b.freelancerLastName}`.trim() || "—"; }
+  function clientLocationLine(b) {
+    const district = AreaSettings.canonicalize(b.district) || b.district;
+    const area = AreaSettings.canonicalize(b.area) || b.area;
+    return [district, area].filter(Boolean).join(", ") || "—";
+  }
+  function hasPrice(b) { return b.price !== "" && b.price != null && !isNaN(Number(b.price)); }
+  function priceNum(b) { return hasPrice(b) ? Number(b.price) : 0; }
+  function hasRating(b) { return b.rating !== "" && b.rating != null && !isNaN(Number(b.rating)); }
+  function statusKey(b) {
+    const s = String(b.status || "Scheduled").trim().toLowerCase();
+    return ["scheduled", "completed", "cancelled", "rebooked"].includes(s) ? s : "scheduled";
+  }
+  function statusLabel(b) {
+    const k = statusKey(b);
+    return k.charAt(0).toUpperCase() + k.slice(1);
+  }
+  function parseBookingDate(b) {
+    if (!b.date) return null;
+    const d = new Date(b.date);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function verticalMeta(key) {
+    const found = DataStore.VERTICALS.find((v) => v.key === key);
+    return found || { key, label: key || "Other", icon: "calendar-check" };
+  }
+  function formatMoney(n) { return "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+
+  function initBookingsPage() {
+    const refreshBtn = document.getElementById("bkRefreshBtn");
+    refreshBtn.innerHTML = `${Icons.svg("clock", { size: 15 })}<span>Refresh</span>`;
+    refreshBtn.addEventListener("click", () => loadBookingsData());
+
+    document.getElementById("bkCommissionIcon").innerHTML = Icons.svg("percent", { size: 16 });
+    document.getElementById("bkCommissionInput").value = getCommissionRate();
+    document.getElementById("bkCommissionSaveBtn").addEventListener("click", () => {
+      const val = Math.max(0, Math.min(100, Number(document.getElementById("bkCommissionInput").value) || 0));
+      document.getElementById("bkCommissionInput").value = val;
+      setCommissionRate(val);
+      const statusEl = document.getElementById("bkCommissionStatus");
+      statusEl.className = "modal-status ok";
+      statusEl.textContent = "Saved.";
+      setTimeout(() => { statusEl.textContent = ""; statusEl.className = "modal-status"; }, 1800);
+      renderKpiRow2();
+      renderVerticalGrid();
+    });
+
+    wireFilterBar();
+    loadBookingsData();
+  }
+
+  const CARD_IDS = ["bkKpiCard2", "bkFilterCard"];
+
+  async function loadBookingsData() {
+    document.getElementById("bkKpiRow1").innerHTML = `
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>
+      <div class="ov-skeleton" style="height:110px;"></div>`;
+    document.getElementById("bkRefreshBtn").classList.add("spinning");
+    try {
+      const { bookings } = await SheetsClient.fetchBookings();
+      bkBookings = bookings;
+      CARD_IDS.forEach((id) => (document.getElementById(id).hidden = false));
+      document.getElementById("bkLayout").hidden = false;
+      populateFilterOptions();
+      renderAll();
+      document.getElementById("bkUpdatedAt").textContent =
+        "Updated " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    } catch (err) {
+      renderDataError(err);
+    } finally {
+      document.getElementById("bkRefreshBtn").classList.remove("spinning");
+    }
+  }
+
+  function renderDataError(err) {
+    console.error("[Bookings] Failed to load Sheets data:", err);
+    const needsScope = err.code === "NEEDS_SHEETS_SCOPE";
+    const message = needsScope ? "This dashboard needs permission to read your Google Sheet." : "Couldn't load your bookings data right now.";
+    const detail = !needsScope && err.message ? `<p class="ov-reconnect-detail">${escapeHtml(err.message)}</p>` : "";
+    document.getElementById("bkKpiRow1").innerHTML = `
+      <div class="ov-reconnect" style="grid-column: 1 / -1;">
+        <p>${message}</p>
+        ${detail}
+        <button type="button" id="bkReconnectBtn">${needsScope ? "Connect Google Sheets" : "Try again"}</button>
+      </div>`;
+    CARD_IDS.forEach((id) => (document.getElementById(id).hidden = true));
+    document.getElementById("bkLayout").hidden = true;
+    document.getElementById("bkReconnectBtn").addEventListener("click", async (e) => {
+      if (!needsScope) { loadBookingsData(); return; }
+      e.target.disabled = true;
+      e.target.textContent = "Connecting…";
+      try {
+        await Auth.reauthorize(SheetsClient.SHEETS_SCOPE);
+        loadBookingsData();
+      } catch (err2) {
+        e.target.disabled = false;
+        e.target.textContent = "Connect Google Sheets";
+        e.target.insertAdjacentHTML("afterend", `<p class="reauth-fail-msg">${escapeHtml(err2.message)}</p>`);
+      }
+    });
+  }
+
+  /* ---------------- filters ---------------- */
+
+  const bkFilters = { preset: "all", customStart: null, customEnd: null, status: "", vertical: "", district: "" };
+
+  function datePresetRange(preset) {
+    const { startOfDay, startOfWeek, startOfMonth, addDays, addMonths } = DataStore._dateHelpers;
+    const now = new Date();
+    if (preset === "today") return { start: startOfDay(now), end: addDays(startOfDay(now), 1) };
+    if (preset === "yesterday") { const y = addDays(startOfDay(now), -1); return { start: y, end: addDays(y, 1) }; }
+    if (preset === "week") return { start: startOfWeek(now), end: addDays(startOfWeek(now), 7) };
+    if (preset === "month") return { start: startOfMonth(now), end: addMonths(startOfMonth(now), 1) };
+    if (preset === "custom" && bkFilters.customStart && bkFilters.customEnd) {
+      return { start: bkFilters.customStart, end: addDays(bkFilters.customEnd, 1) };
+    }
+    return { start: null, end: null };
+  }
+
+  function getFilteredBookings() {
+    const { start, end } = datePresetRange(bkFilters.preset);
+    return bkBookings.filter((b) => {
+      if (start) {
+        const d = parseBookingDate(b);
+        if (!d || d < start || d >= end) return false;
+      }
+      if (bkFilters.status && statusKey(b) !== bkFilters.status.toLowerCase()) return false;
+      if (bkFilters.vertical && b.vertical !== bkFilters.vertical) return false;
+      if (bkFilters.district && (AreaSettings.canonicalize(b.district) || b.district) !== bkFilters.district) return false;
+      return true;
+    });
+  }
+
+  function populateFilterOptions() {
+    const verticalSelect = document.getElementById("bkVerticalSelect");
+    const districtSelect = document.getElementById("bkDistrictSelect");
+    verticalSelect.innerHTML = `<option value="">All</option>` + DataStore.VERTICALS.map((v) => `<option value="${v.key}">${v.label}</option>`).join("");
+    const districts = Array.from(new Set(bkBookings.map((b) => AreaSettings.canonicalize(b.district) || b.district).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    districtSelect.innerHTML = `<option value="">All</option>` + districts.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("");
+  }
+
+  function wireFilterBar() {
+    document.getElementById("bkDatePresets").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-preset]");
+      if (!btn || btn.dataset.preset === "custom") return;
+      bkFilters.preset = btn.dataset.preset;
+      bkFilters.customStart = null;
+      bkFilters.customEnd = null;
+      document.querySelectorAll("#bkDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderFilteredSections();
+    });
+    DateRangePicker.attach(document.getElementById("bkCustomRangeBtn"), {
+      getInitial: () => ({ start: bkFilters.customStart, end: bkFilters.customEnd }),
+      onApply: (start, end) => {
+        bkFilters.preset = "custom";
+        bkFilters.customStart = start;
+        bkFilters.customEnd = end;
+        const btn = document.getElementById("bkCustomRangeBtn");
+        btn.textContent = `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+        document.querySelectorAll("#bkDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
+        renderFilteredSections();
+      },
+      onClear: () => {
+        bkFilters.preset = "all";
+        bkFilters.customStart = null;
+        bkFilters.customEnd = null;
+        document.getElementById("bkCustomRangeBtn").textContent = "Custom Range";
+        document.querySelectorAll("#bkDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+        renderFilteredSections();
+      },
+    });
+    document.getElementById("bkStatusSelect").addEventListener("change", (e) => { bkFilters.status = e.target.value; renderFilteredSections(); });
+    document.getElementById("bkVerticalSelect").addEventListener("change", (e) => { bkFilters.vertical = e.target.value; renderFilteredSections(); });
+    document.getElementById("bkDistrictSelect").addEventListener("change", (e) => { bkFilters.district = e.target.value; renderFilteredSections(); });
+    document.getElementById("bkClearFiltersBtn").addEventListener("click", () => {
+      bkFilters.preset = "all"; bkFilters.customStart = null; bkFilters.customEnd = null;
+      bkFilters.status = ""; bkFilters.vertical = ""; bkFilters.district = "";
+      document.getElementById("bkCustomRangeBtn").textContent = "Custom Range";
+      document.querySelectorAll("#bkDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+      document.getElementById("bkStatusSelect").value = "";
+      document.getElementById("bkVerticalSelect").value = "";
+      document.getElementById("bkDistrictSelect").value = "";
+      renderFilteredSections();
+    });
+  }
+
+  /* ---------------- render orchestration ---------------- */
+
+  function renderAll() {
+    renderKpiRow1();
+    renderKpiRow2();
+    renderFilteredSections();
+    renderStatList();
+    renderInsights();
+  }
+  function renderFilteredSections() {
+    renderList();
+    renderVerticalGrid();
+  }
+
+  /* ---------------- KPI row 1: counts (all-time) ---------------- */
+
+  function renderKpiRow1() {
+    const total = bkBookings.length;
+    const completed = bkBookings.filter((b) => statusKey(b) === "completed").length;
+    const cancelled = bkBookings.filter((b) => statusKey(b) === "cancelled").length;
+    const cards = [
+      { tone: "leads", icon: "calendar-check", value: total, label: "Total Bookings", sub: "All-time" },
+      { tone: "teal", icon: "check", value: completed, label: "Completed Bookings", sub: "All-time" },
+      { tone: "red", icon: "x", value: cancelled, label: "Cancelled Bookings", sub: "All-time" },
+    ];
+    document.getElementById("bkKpiRow1").innerHTML = cards.map((c) => `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top"><div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div></div>
+        <div class="ov-kpi-value">${c.value.toLocaleString()}</div>
+        <div class="ov-kpi-label">${c.label} &middot; ${c.sub}</div>
+      </div>`).join("");
+  }
+
+  /* ---------------- KPI row 2: money (all-time) ---------------- */
+
+  function renderKpiRow2() {
+    const priced = bkBookings.filter(hasPrice);
+    const gmv = priced.reduce((s, b) => s + priceNum(b), 0);
+    const rate = getCommissionRate();
+    const revenue = priced.reduce((s, b) => s + priceNum(b) * (rate / 100), 0);
+    const payout = gmv - revenue;
+    const cards = [
+      { tone: "indigo", icon: "banknote", value: formatMoney(gmv), label: "GMV", sub: "Gross Booking Value" },
+      { tone: "leads", icon: "percent", value: formatMoney(revenue), label: "Revenue", sub: `${rate}% commission` },
+      { tone: "teal", icon: "wallet", value: formatMoney(payout), label: "Provider Payout", sub: "Paid to freelancers" },
+    ];
+    document.getElementById("bkKpiRow2").innerHTML = cards.map((c) => `
+      <div class="ov-kpi-card tone-${c.tone}">
+        <div class="ov-kpi-top"><div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div></div>
+        <div class="ov-kpi-value kpi-value-text">${c.value}</div>
+        <div class="ov-kpi-label">${c.label} &middot; ${c.sub}</div>
+      </div>`).join("");
+  }
+
+  /* ---------------- right sidebar: per-vertical grid ---------------- */
+
+  function renderVerticalGrid() {
+    const filtered = getFilteredBookings();
+    const grid = document.getElementById("bkVerticalGrid");
+    grid.innerHTML = DataStore.VERTICALS.map((v) => {
+      const bookedCount = filtered.filter((b) => b.vertical === v.key).length;
+      const allForVertical = bkBookings.filter((b) => b.vertical === v.key && hasPrice(b));
+      const avgValue = allForVertical.length ? allForVertical.reduce((s, b) => s + priceNum(b), 0) / allForVertical.length : null;
+      return `
+      <div class="ov-vertical-box" title="${v.label}">
+        <div class="ov-vertical-box-head">
+          <span class="ov-vertical-box-icon">${Icons.svg(v.icon, { size: 14 })}</span>
+          <span class="ov-vertical-box-label">${v.label}</span>
+        </div>
+        <div class="ov-vertical-box-count">${bookedCount}</div>
+        <div class="ov-vertical-box-count-label">booked</div>
+        <div class="bk-vbox-secondary">avg <strong>${avgValue !== null ? formatMoney(avgValue) : "—"}</strong></div>
+      </div>`;
+    }).join("");
+  }
+
+  /* ---------------- right sidebar: repeat rate + avg rating (all-time) ---------------- */
+
+  function renderStatList() {
+    const byPhone = {};
+    bkBookings.forEach((b) => {
+      const key = (b.clientPhone || "").trim();
+      if (!key) return;
+      byPhone[key] = (byPhone[key] || 0) + 1;
+    });
+    const clientKeys = Object.keys(byPhone);
+    const repeatClients = clientKeys.filter((k) => byPhone[k] > 1).length;
+    const repeatRate = clientKeys.length ? Math.round((repeatClients / clientKeys.length) * 1000) / 10 : 0;
+
+    const rated = bkBookings.filter(hasRating);
+    const avgRating = rated.length ? rated.reduce((s, b) => s + Number(b.rating), 0) / rated.length : null;
+
+    document.getElementById("bkStatList").innerHTML = `
+      <div class="bk-stat-box">
+        <div class="bk-stat-box-icon">${Icons.svg("rotate-ccw", { size: 18 })}</div>
+        <div class="bk-stat-box-value">${clientKeys.length ? repeatRate + "%" : "—"}</div>
+        <div class="bk-stat-box-label">Repeat Booking Rate</div>
+      </div>
+      <div class="bk-stat-box">
+        <div class="bk-stat-box-icon">${Icons.svg("star", { size: 18 })}</div>
+        <div class="bk-stat-box-value">${avgRating !== null ? avgRating.toFixed(1) + " ⭐" : "—"}</div>
+        <div class="bk-stat-box-label">Avg Rating</div>
+      </div>`;
+  }
+
+  /* ---------------- AI Insights (rule-based, real numbers only) ---------------- */
+
+  function renderInsights() {
+    const insights = [];
+    const total = bkBookings.length;
+
+    if (total > 0) {
+      const cancelled = bkBookings.filter((b) => statusKey(b) === "cancelled").length;
+      const cancelRate = Math.round((cancelled / total) * 100);
+      if (cancelRate >= 20) {
+        insights.push({ tone: "red", icon: "trending-down", html: `<strong>${cancelRate}%</strong> of all bookings have been cancelled (${cancelled} of ${total}) — worth a closer look.` });
+      } else {
+        insights.push({ tone: "green", icon: "check", html: `Cancellation rate is <strong>${cancelRate}%</strong> across ${total} booking${total === 1 ? "" : "s"} — healthy.` });
+      }
+
+      const { startOfMonth } = DataStore._dateHelpers;
+      const monthStart = startOfMonth(new Date());
+      const stats = DataStore.VERTICALS.map((v) => ({ label: v.label, count: bkBookings.filter((b) => b.vertical === v.key && parseBookingDate(b) && parseBookingDate(b) >= monthStart).length }));
+      const top = stats.slice().sort((a, b) => b.count - a.count)[0];
+      if (top && top.count > 0) {
+        insights.push({ tone: "green", icon: "target", html: `<strong>${top.label}</strong> leads bookings this month with <strong>${top.count}</strong>.` });
+      }
+
+      const missingPrice = bkBookings.filter((b) => statusKey(b) === "completed" && !hasPrice(b)).length;
+      if (missingPrice > 0) {
+        insights.push({ tone: "red", icon: "clock", html: `<strong>${missingPrice}</strong> completed booking${missingPrice === 1 ? " is" : "s are"} still missing a price — GMV/Revenue won't count ${missingPrice === 1 ? "it" : "them"} until filled in.` });
+      }
+    }
+
+    const container = document.getElementById("bkInsights");
+    if (!insights.length) {
+      container.innerHTML = `<p class="ov-empty-hint">Nothing to report yet — create a booking from the Applied page to get started.</p>`;
+      return;
+    }
+    container.innerHTML = insights.slice(0, 3).map((i) => `
+      <div class="ov-insight-row ov-insight-tone-${i.tone}">
+        <span class="ov-insight-icon">${Icons.svg(i.icon, { size: 15 })}</span>
+        <span class="ov-insight-text">${i.html}</span>
+      </div>`).join("");
+  }
+
+  /* ---------------- booking card list ---------------- */
+
+  function bkCardHtml(b, idx) {
+    const v = verticalMeta(b.vertical);
+    const d = parseBookingDate(b);
+    const dateText = d ? d.toLocaleString([], { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : null;
+    const sKey = statusKey(b);
+    return `
+    <div class="bk-card" data-idx="${idx}">
+      <div class="bk-card-top">
+        <div class="bk-panel bk-panel-side">
+          <span class="bk-panel-icon-circle">${Icons.svg("circle-user", { size: 17 })}</span>
+          <span class="bk-panel-role-label">Client</span>
+          <span class="bk-panel-name">${escapeHtml(fullClientName(b))}</span>
+          <span class="bk-panel-row">${Icons.svg("phone", { size: 12 })}<span>${escapeHtml(b.clientPhone || "—")}</span></span>
+          <span class="bk-panel-row">${Icons.svg("map-pin", { size: 12 })}<span title="${escapeHtml(clientLocationLine(b))}">${escapeHtml(clientLocationLine(b))}</span></span>
+        </div>
+        <div class="bk-panel bk-panel-center">
+          <span class="bk-center-icon">${Icons.svg(v.icon, { size: 20 })}</span>
+          <div class="bk-center-title">${escapeHtml(v.label)}</div>
+          <div class="bk-center-divider"></div>
+          <div class="bk-center-line"><span class="muted">DATE:</span> ${dateText ? escapeHtml(dateText) : `<span class="bk-center-empty">Not set yet</span>`}</div>
+          ${hasPrice(b) ? `<div class="bk-center-price">PRICE: ${formatMoney(priceNum(b))}</div>` : `<div class="bk-center-empty">Price not set yet</div>`}
+          ${b.duration ? `<div class="bk-center-duration">Duration: ${escapeHtml(b.duration)}</div>` : ""}
+        </div>
+        <div class="bk-panel bk-panel-side">
+          <span class="bk-panel-icon-circle">${Icons.svg("circle-user", { size: 17 })}</span>
+          <span class="bk-panel-role-label">Freelancer</span>
+          <span class="bk-panel-name">${escapeHtml(fullFreelancerName(b))}</span>
+          <span class="bk-panel-row">${Icons.svg("phone", { size: 12 })}<span>${escapeHtml(b.freelancerPhone || "—")}</span></span>
+          ${hasRating(b) ? `<span class="bk-panel-row">${Icons.svg("star", { size: 12 })}<span>${escapeHtml(String(b.rating))} / 5</span></span>` : ""}
+        </div>
+      </div>
+      <div class="bk-card-bottom">
+        <span class="bk-status-pill status-${sKey}">${statusLabel(b)}</span>
+        <span class="bk-booking-id">Booking ID: ${escapeHtml(b.bookingId || "—")}</span>
+        <span class="bk-brand">${Icons.svg("sparkles", { size: 13 })}Servi</span>
+      </div>
+      <div class="bk-card-actions">
+        <button type="button" class="bk-action-btn state-scheduled${sKey === "scheduled" ? " active" : ""}" data-action="status" data-status="Scheduled">Scheduled</button>
+        <button type="button" class="bk-action-btn state-completed${sKey === "completed" ? " active" : ""}" data-action="status" data-status="Completed">Completed</button>
+        <button type="button" class="bk-action-btn state-cancelled${sKey === "cancelled" ? " active" : ""}" data-action="status" data-status="Cancelled">Cancel Session</button>
+        <button type="button" class="bk-action-btn rebook" data-action="rebook">${Icons.svg("rotate-ccw", { size: 12 })} Rebook</button>
+      </div>
+    </div>`;
+  }
+
+  function renderList() {
+    const filtered = getFilteredBookings().slice().sort((a, b) => b._row - a._row);
+    document.getElementById("bkListHint").textContent = `${filtered.length.toLocaleString()} booking${filtered.length === 1 ? "" : "s"} matching current filters`;
+    const list = document.getElementById("bkList");
+    if (!filtered.length) {
+      list.innerHTML = `<p class="applied-empty">No bookings match this filter.</p>`;
+      return;
+    }
+    list.innerHTML = filtered.map((b, i) => bkCardHtml(b, i)).join("");
+
+    list.querySelectorAll(".bk-card").forEach((cardEl) => {
+      const b = filtered[Number(cardEl.dataset.idx)];
+      cardEl.addEventListener("click", (e) => {
+        if (e.target.closest(".bk-card-actions")) return;
+        openDetailModal(b);
+      });
+      cardEl.querySelectorAll("[data-action='status']").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await setBookingStatus(b, btn.dataset.status, cardEl);
+        });
+      });
+      const rebookBtn = cardEl.querySelector("[data-action='rebook']");
+      if (rebookBtn) {
+        rebookBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await rebookBooking(b, rebookBtn);
+        });
+      }
+    });
+  }
+
+  async function setBookingStatus(b, newStatus, cardEl) {
+    cardEl.style.opacity = "0.6";
+    try {
+      await SheetsClient.updateBookingFields(b._row, { status: newStatus });
+      b.status = newStatus;
+      renderAll();
+    } catch (err) {
+      console.error("[Bookings] Failed to update status:", err);
+      alert(err.message || "Couldn't update this booking's status — try again.");
+      cardEl.style.opacity = "1";
+    }
+  }
+
+  async function rebookBooking(b, btn) {
+    btn.disabled = true;
+    btn.textContent = "Rebooking…";
+    try {
+      await SheetsClient.updateBookingFields(b._row, { status: "Rebooked" });
+      const { bookings: fresh } = await SheetsClient.fetchBookings();
+      const newId = SheetsClient.generateBookingId(b.vertical, fresh);
+      await SheetsClient.appendBooking({
+        clientFirstName: b.clientFirstName, clientLastName: b.clientLastName, clientPhone: b.clientPhone,
+        district: b.district, area: b.area, street: b.street, building: b.building, block: b.block, floor: b.floor,
+        freelancerFirstName: b.freelancerFirstName, freelancerLastName: b.freelancerLastName, freelancerPhone: b.freelancerPhone,
+        vertical: b.vertical, status: "Scheduled", bookingId: newId,
+      });
+      await loadBookingsData();
+    } catch (err) {
+      console.error("[Bookings] Failed to rebook:", err);
+      alert(err.message || "Couldn't create the rebooking — try again.");
+      btn.disabled = false;
+      btn.innerHTML = `${Icons.svg("rotate-ccw", { size: 12 })} Rebook`;
+    }
+  }
+
+  /* ============================================================
+     Card detail / edit modal
+     ------------------------------------------------------------
+     Read-only: client/freelancer identity + address, vertical, Booking
+     ID, current status. Editable: session Date & start time (one
+     datetime-local field — the sheet only has a single "Date" column, so
+     start time is folded into it), End Time (same day, used only to
+     auto-calculate Duration — never stored on its own), Price, Rating,
+     Review (see file header re: Rating/Review judgment call).
+     ============================================================ */
+
+  function closeDetailModal() {
+    const overlay = document.getElementById("bkDetailOverlay");
+    if (overlay) overlay.remove();
+  }
+
+  function toDateTimeLocalValue(d) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function openDetailModal(b) {
+    closeDetailModal();
+    const v = verticalMeta(b.vertical);
+    const d = parseBookingDate(b);
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.id = "bkDetailOverlay";
+    overlay.innerHTML = `
+      <div class="modal-box modal-wide">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">${escapeHtml(v.label)} booking — ${escapeHtml(b.bookingId || "no ID")}</h3>
+            <div class="modal-subtitle">${escapeHtml(fullClientName(b))} &amp; ${escapeHtml(fullFreelancerName(b))}</div>
+          </div>
+          <button type="button" class="modal-close-btn" id="bkDetailCloseBtn" aria-label="Close">${Icons.svg("x", { size: 16 })}</button>
+        </div>
+        <div class="modal-body">
+          <div class="bk-detail-grid">
+            <div class="bk-detail-item"><div class="label">Client</div><div class="value">${escapeHtml(fullClientName(b))} · ${escapeHtml(b.clientPhone || "—")}</div></div>
+            <div class="bk-detail-item"><div class="label">Freelancer</div><div class="value">${escapeHtml(fullFreelancerName(b))} · ${escapeHtml(b.freelancerPhone || "—")}</div></div>
+            <div class="bk-detail-item"><div class="label">Address</div><div class="value">${escapeHtml([b.street, b.building, b.block, b.floor].filter(Boolean).join(", ") || "—")}</div></div>
+            <div class="bk-detail-item"><div class="label">District / Area</div><div class="value">${escapeHtml(clientLocationLine(b))}</div></div>
+            <div class="bk-detail-item"><div class="label">Vertical</div><div class="value">${escapeHtml(v.label)}</div></div>
+            <div class="bk-detail-item"><div class="label">Status</div><div class="value"><span class="bk-status-pill status-${statusKey(b)}">${statusLabel(b)}</span></div></div>
+          </div>
+          <hr class="bk-detail-divider" />
+          <form id="bkDetailForm">
+            <div class="modal-form-grid">
+              <div class="settings-field"><label>Session Date &amp; Start Time</label><input type="datetime-local" id="bkEditDateTime" value="${d ? toDateTimeLocalValue(d) : ""}" /></div>
+              <div class="settings-field"><label>End Time (for Duration)</label><input type="time" id="bkEditEndTime" /></div>
+              <div class="settings-field"><label>Price ($)</label><input type="number" min="0" step="0.01" id="bkEditPrice" value="${hasPrice(b) ? Number(b.price) : ""}" /></div>
+              <div class="settings-field"><label>Duration</label><input type="text" id="bkEditDuration" value="${escapeHtml(b.duration || "")}" placeholder="Auto-filled from End Time" readonly /></div>
+              <div class="settings-field"><label>Rating (0–5)</label><input type="number" min="0" max="5" step="0.1" id="bkEditRating" value="${hasRating(b) ? Number(b.rating) : ""}" /></div>
+              <div class="settings-field span-2"><label>Review Notes</label><input type="text" id="bkEditReview" value="${escapeHtml(b.review || "")}" placeholder="What the client said about the session" /></div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <span class="modal-status" id="bkDetailStatus"></span>
+          <button type="button" class="modal-btn" id="bkDetailCancelBtn">Close</button>
+          <button type="submit" form="bkDetailForm" class="modal-btn primary" id="bkDetailSaveBtn">Save Changes</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById("bkDetailCloseBtn").addEventListener("click", closeDetailModal);
+    document.getElementById("bkDetailCancelBtn").addEventListener("click", closeDetailModal);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) closeDetailModal(); });
+
+    function recomputeDuration() {
+      const startVal = document.getElementById("bkEditDateTime").value;
+      const endVal = document.getElementById("bkEditEndTime").value;
+      if (!startVal || !endVal) return;
+      const start = new Date(startVal);
+      const [eh, em] = endVal.split(":").map(Number);
+      const end = new Date(start);
+      end.setHours(eh, em, 0, 0);
+      let hours = (end.getTime() - start.getTime()) / 3600000;
+      if (hours <= 0) hours += 24; // assume an overnight session rather than a negative duration
+      hours = Math.round(hours * 4) / 4; // nearest quarter-hour
+      document.getElementById("bkEditDuration").value = `${hours} Hour${hours === 1 ? "" : "s"}`;
+    }
+    document.getElementById("bkEditEndTime").addEventListener("change", recomputeDuration);
+    document.getElementById("bkEditDateTime").addEventListener("change", recomputeDuration);
+
+    document.getElementById("bkDetailForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const statusEl = document.getElementById("bkDetailStatus");
+      const saveBtn = document.getElementById("bkDetailSaveBtn");
+      const fields = {};
+      const dtVal = document.getElementById("bkEditDateTime").value;
+      if (dtVal) fields.date = dtVal;
+      const durVal = document.getElementById("bkEditDuration").value;
+      if (durVal) fields.duration = durVal;
+      const priceVal = document.getElementById("bkEditPrice").value;
+      if (priceVal !== "") fields.price = priceVal;
+      const ratingVal = document.getElementById("bkEditRating").value;
+      if (ratingVal !== "") fields.rating = ratingVal;
+      const reviewVal = document.getElementById("bkEditReview").value;
+      if (reviewVal !== "") fields.review = reviewVal;
+
+      saveBtn.disabled = true;
+      statusEl.className = "modal-status";
+      statusEl.textContent = "Saving…";
+      try {
+        await SheetsClient.updateBookingFields(b._row, fields);
+        Object.assign(b, fields);
+        statusEl.className = "modal-status ok";
+        statusEl.textContent = "Saved.";
+        renderAll();
+        setTimeout(closeDetailModal, 700);
+      } catch (err) {
+        console.error("[Bookings] Failed to save booking:", err);
+        statusEl.className = "modal-status err";
+        statusEl.textContent = err.message || "Couldn't save — try again.";
+        saveBtn.disabled = false;
+      }
+    });
+  }
+
+  /* ============================================================
+     Bootstrap — same pattern as every other page.
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[Bookings] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "bookings", root: ".." });
+    initBookingsPage();
+  }
+</script>
+
+</body>
+</html>

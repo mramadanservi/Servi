@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard</title>
+</head>
+<body>
+<script src="shared/authConfig.js"></script>
+<script src="shared/auth.js"></script>
+<script>
+  // Entry point: bounce straight to the right place depending on whether
+  // this browser tab already has a valid, authorized session.
+  window.location.replace(Auth.restoreSession() ? "dashboard/overview.html" : "login.html");
+</script>
+</body>
+</html>

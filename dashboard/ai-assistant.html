@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — AI Assistant</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<!-- Needed for Auth.ensureToken()'s silent token renewal (see auth.js). -->
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">AI Assistant</h1>
+      <p class="page-subheading">Ask about recruitment, team, or applicant data — answers come straight from your real Google Sheets.</p>
+    </div>
+    <div class="ov-header-actions">
+      <label class="asst-model-picker">
+        <span>Model</span>
+        <select id="asstModelSelect"></select>
+      </label>
+    </div>
+  </div>
+
+  <div class="asst-layout">
+    <div class="asst-sidebar">
+      <div class="asst-sidebar-header">
+        <button type="button" class="asst-new-btn" id="asstNewChatBtn"></button>
+        <button type="button" class="asst-clear-btn" id="asstClearAllBtn" title="Clear all chats"></button>
+      </div>
+      <div class="asst-chat-list" id="asstChatList"></div>
+    </div>
+
+    <div class="asst-main">
+      <div class="asst-api-banner" id="asstApiKeyBanner" hidden>
+        <span>The AI Assistant hasn't been configured with a Gemini API key yet — this is set directly in the app's code (Settings no longer has an editable key field), so ask an admin to add one.</span>
+      </div>
+
+      <div class="chat-scroll" id="chatScroll">
+        <div class="chat-empty" id="chatEmpty">
+          <img src="../assets/images/icon-light.png" alt="" class="chat-empty-icon" id="emptyStateLogo" />
+          <h2>Ask me anything about your data</h2>
+          <p>I only answer using real numbers pulled live from your Google Sheets — nothing made up. Try one of these, or type your own question below.</p>
+          <div class="chip-grid" id="chipGrid"></div>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+      </div>
+
+      <div class="chat-input-bar">
+        <div class="chat-input-row">
+          <textarea
+            id="chatInput"
+            class="chat-input"
+            rows="1"
+            placeholder="Ask a question about recruitment, team, or applicants…"
+          ></textarea>
+          <button type="button" class="send-btn" id="sendBtn" title="Send"></button>
+        </div>
+        <p class="chat-hint">Each saved chat remembers its own earlier questions until you delete it or clear all chats.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/statusSettings.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/areaSettings.js"></script>
+<script src="../shared/legacyApplied.js"></script>
+<script src="../shared/team.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/teamTasksConfig.js"></script>
+<script src="../shared/aiDataBridge.js"></script>
+<script src="../shared/aiTools.js"></script>
+<script src="../shared/geminiConfig.js"></script>
+<script src="../shared/geminiClient.js"></script>
+<script src="../shared/chatStore.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     AI Assistant page
+     ------------------------------------------------------------
+     A genuine Gemini-API-backed assistant (tool-calling, real
+     answers only) — ported from the older, fully-built
+     servi-unified-dashboard's assistant/ module, restyled to v2's
+     design system. See shared/geminiClient.js, aiTools.js,
+     aiDataBridge.js and geminiConfig.js for the parts that actually
+     changed versus that precedent (architecture adaptations, dropped
+     booking tools, the API-key-storage note) — this file is mostly
+     just the chat UI (ported from precedent's assistant/js/chat.js
+     and main.js) plus the NEW multi-chat side panel (ChatStore).
+     ============================================================ */
+
+  let els = {};
+  let sending = false;
+  let activeChatId = null;
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function scrollToBottom() {
+    els.scroll.scrollTop = els.scroll.scrollHeight;
+  }
+
+  function hideEmptyState() {
+    if (!els.empty.hidden) els.empty.hidden = true;
+  }
+
+  function addMessageEl(kind, html) {
+    const row = document.createElement("div");
+    row.className = `msg msg-${kind}`;
+    row.innerHTML = `<div class="msg-bubble">${html}</div>`;
+    els.messages.appendChild(row);
+    scrollToBottom();
+    return row;
+  }
+
+  function addTyping() {
+    return addMessageEl("assistant", '<span class="typing-dots"><span></span><span></span><span></span></span>');
+  }
+
+  function setSending(isSending) {
+    sending = isSending;
+    els.sendBtn.disabled = isSending;
+    els.input.disabled = isSending;
+  }
+
+  function autoResize() {
+    els.input.style.height = "auto";
+    els.input.style.height = Math.min(140, els.input.scrollHeight) + "px";
+  }
+
+  function refreshApiKeyBanner() {
+    els.apiBanner.hidden = GeminiClient.hasApiKey();
+  }
+
+  /* ============================================================
+     Model picker + suggested-query chips
+     ------------------------------------------------------------
+     Both read/write the SAME shared storage Settings > AI Settings
+     uses (GeminiConfig.MODEL_STORAGE_KEY / SUGGESTED_QUERIES_STORAGE_
+     KEY), so a change made in either place shows up in the other —
+     satisfies "accessible from AI Settings and the AI Assistant page"
+     without keeping two separate copies of either setting.
+     ============================================================ */
+
+  function getSuggestedQueries() {
+    try {
+      const raw = localStorage.getItem(GeminiConfig.SUGGESTED_QUERIES_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch (_) {}
+    return GeminiConfig.DEFAULT_SUGGESTED_QUERIES;
+  }
+
+  function renderChips() {
+    els.chipGrid.innerHTML = getSuggestedQueries()
+      .map((q) => `<button type="button" class="chip" data-q="${escapeHtml(q)}">${escapeHtml(q)}</button>`)
+      .join("");
+  }
+
+  function initModelPicker() {
+    const select = document.getElementById("asstModelSelect");
+    select.innerHTML = GeminiConfig.AVAILABLE_MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join("");
+    select.value = GeminiClient.getModel();
+    select.addEventListener("change", () => GeminiClient.setModel(select.value));
+  }
+
+  /* ============================================================
+     Chat side panel (NEW — see chatStore.js's header comment)
+     ============================================================ */
+
+  function timeAgoLabel(ts) {
+    const diffMs = Date.now() - ts;
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(ts).toLocaleDateString();
+  }
+
+  function renderChatList() {
+    const chats = ChatStore.list();
+    if (!chats.length) {
+      els.chatList.innerHTML = `<div class="asst-chat-empty">No saved chats yet — click "New Chat" to start one.</div>`;
+      return;
+    }
+    els.chatList.innerHTML = chats
+      .map(
+        (c) => `
+      <div class="asst-chat-item${c.id === activeChatId ? " active" : ""}" data-id="${c.id}">
+        <div class="asst-chat-item-info">
+          <div class="asst-chat-item-title">${escapeHtml(c.title || "New chat")}</div>
+          <div class="asst-chat-item-time">${timeAgoLabel(c.updatedAt)}</div>
+        </div>
+        <button type="button" class="asst-chat-item-delete" data-delete-id="${c.id}" title="Delete chat">${Icons.svg("x", { size: 13 })}</button>
+      </div>`
+      )
+      .join("");
+  }
+
+  function renderChatMessages(chat) {
+    els.messages.innerHTML = "";
+    if (!chat || !chat.messages.length) {
+      els.empty.hidden = false;
+      return;
+    }
+    els.empty.hidden = true;
+    chat.messages.forEach((m) => {
+      addMessageEl(m.role, escapeHtml(m.text));
+    });
+  }
+
+  function switchToChat(id) {
+    const chat = ChatStore.get(id);
+    if (!chat) return;
+    activeChatId = id;
+    ChatStore.setActiveId(id);
+    GeminiClient.setHistory(chat.geminiHistory || []);
+    renderChatMessages(chat);
+    renderChatList();
+  }
+
+  function startNewChat() {
+    if (sending) return;
+    const chat = ChatStore.create();
+    switchToChat(chat.id);
+  }
+
+  function deleteChat(id) {
+    const wasActive = id === activeChatId;
+    ChatStore.remove(id);
+    if (wasActive) {
+      const remaining = ChatStore.list();
+      if (remaining.length) {
+        switchToChat(remaining[0].id);
+      } else {
+        activeChatId = null;
+        GeminiClient.resetHistory();
+        renderChatMessages(null);
+      }
+    }
+    renderChatList();
+  }
+
+  function clearAllChats() {
+    if (sending) return;
+    ChatStore.clearAll();
+    activeChatId = null;
+    GeminiClient.resetHistory();
+    renderChatMessages(null);
+    renderChatList();
+  }
+
+  function ensureActiveChat() {
+    const savedActiveId = ChatStore.getActiveId();
+    if (savedActiveId && ChatStore.get(savedActiveId)) {
+      switchToChat(savedActiveId);
+      return;
+    }
+    const chats = ChatStore.list();
+    if (chats.length) {
+      switchToChat(chats[0].id);
+    } else {
+      const chat = ChatStore.create();
+      switchToChat(chat.id);
+    }
+  }
+
+  /* ============================================================
+     Sending a question
+     ============================================================ */
+
+  async function send(rawText) {
+    const text = String(rawText == null ? els.input.value : rawText).trim();
+    if (!text || sending) return;
+    if (!activeChatId) startNewChat();
+
+    hideEmptyState();
+    addMessageEl("user", escapeHtml(text));
+    ChatStore.appendMessage(activeChatId, { role: "user", text });
+    renderChatList();
+
+    els.input.value = "";
+    autoResize();
+    setSending(true);
+
+    const typingRow = addTyping();
+
+    let result;
+    try {
+      result = await GeminiClient.ask(text);
+    } catch (e) {
+      result = { ok: false, message: "Something unexpected went wrong answering that. Try again." };
+    }
+
+    typingRow.remove();
+
+    if (result && result.ok) {
+      addMessageEl("assistant", escapeHtml(result.text));
+      ChatStore.appendMessage(activeChatId, { role: "assistant", text: result.text });
+    } else {
+      const message = (result && result.message) || "Something went wrong. Try again.";
+      addMessageEl("error", escapeHtml(message));
+      ChatStore.appendMessage(activeChatId, { role: "error", text: message });
+    }
+
+    // Persist this chat's updated Gemini conversation history so switching
+    // away and back (or reloading the page) keeps its follow-up context.
+    ChatStore.update(activeChatId, { geminiHistory: GeminiClient.getHistory() });
+    renderChatList();
+
+    setSending(false);
+    els.input.focus();
+    refreshApiKeyBanner();
+  }
+
+  function wireChat() {
+    els.sendBtn.addEventListener("click", () => send());
+    els.input.addEventListener("input", autoResize);
+    els.input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    });
+    els.chipGrid.addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (chip) send(chip.dataset.q);
+    });
+  }
+
+  function wireSidePanel() {
+    document.getElementById("asstNewChatBtn").addEventListener("click", startNewChat);
+    document.getElementById("asstClearAllBtn").addEventListener("click", () => {
+      if (confirm("Clear all saved chats? This can't be undone.")) clearAllChats();
+    });
+    els.chatList.addEventListener("click", (e) => {
+      const delBtn = e.target.closest("[data-delete-id]");
+      if (delBtn) {
+        e.stopPropagation();
+        deleteChat(delBtn.dataset.deleteId);
+        return;
+      }
+      const item = e.target.closest(".asst-chat-item");
+      if (item) switchToChat(item.dataset.id);
+    });
+  }
+
+  function initAiAssistantPage() {
+    els = {
+      scroll: document.getElementById("chatScroll"),
+      empty: document.getElementById("chatEmpty"),
+      messages: document.getElementById("chatMessages"),
+      input: document.getElementById("chatInput"),
+      sendBtn: document.getElementById("sendBtn"),
+      chipGrid: document.getElementById("chipGrid"),
+      apiBanner: document.getElementById("asstApiKeyBanner"),
+      chatList: document.getElementById("asstChatList"),
+    };
+
+    document.getElementById("asstNewChatBtn").innerHTML = `${Icons.svg("plus", { size: 14 })}<span>New Chat</span>`;
+    document.getElementById("asstClearAllBtn").innerHTML = Icons.svg("x", { size: 14 });
+    els.sendBtn.innerHTML = Icons.svg("chevron-right", { size: 18 });
+
+    initModelPicker();
+    renderChips();
+    wireChat();
+    wireSidePanel();
+    ensureActiveChat();
+    renderChatList();
+    refreshApiKeyBanner();
+
+    // The model or suggested-queries list can change from Settings open in
+    // another tab — same cross-tab "storage" event pattern used elsewhere.
+    window.addEventListener("storage", (e) => {
+      if (e.key === GeminiConfig.MODEL_STORAGE_KEY) document.getElementById("asstModelSelect").value = GeminiClient.getModel();
+      if (e.key === GeminiConfig.SUGGESTED_QUERIES_STORAGE_KEY) renderChips();
+    });
+  }
+
+  /* ============================================================
+     Theme-aware logo — same MutationObserver pattern already used
+     for the sidebar's own logo (shared/sidebar.js), applied here to
+     the empty-state's centered icon (per the explicit ask: "make
+     sure the Servi logo is in the middle same as our one in the old
+     dashboard").
+     ============================================================ */
+  (function () {
+    function updateLogo() {
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const src = isDark ? "../assets/images/icon-dark.png" : "../assets/images/icon-light.png";
+      const emptyLogo = document.getElementById("emptyStateLogo");
+      if (emptyLogo) emptyLogo.src = src;
+    }
+    document.addEventListener("DOMContentLoaded", updateLogo);
+    new MutationObserver(updateLogo).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  })();
+
+  /* ============================================================
+     Bootstrap
+     ============================================================ */
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    try {
+      Auth.init();
+    } catch (e) {
+      console.warn("[AI Assistant] Auth.init() failed — silent token renewal won't be available:", e);
+    }
+    AppShell.init({ current: "ai-assistant", root: ".." });
+    initAiAssistantPage();
+  }
+</script>
+
+</body>
+</html>

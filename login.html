@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Sign in</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --primary: #f2763f;
+    --primary-dark: #d9602c;
+    --gold: #f2b544;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background:
+      radial-gradient(1100px 700px at 15% 10%, rgba(242, 181, 68, 0.35), transparent 60%),
+      radial-gradient(1200px 800px at 85% 90%, rgba(242, 118, 63, 0.30), transparent 60%),
+      linear-gradient(160deg, #fdf6ee 0%, #f7e9d8 45%, #f3ddc4 100%);
+    position: relative;
+    overflow: hidden;
+  }
+  body::before, body::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(2px);
+    opacity: 0.5;
+  }
+  body::before {
+    width: 480px; height: 480px;
+    top: -140px; left: -120px;
+    background: conic-gradient(from 90deg, var(--primary), var(--gold), var(--primary));
+    opacity: 0.18;
+  }
+  body::after {
+    width: 380px; height: 380px;
+    bottom: -120px; right: -100px;
+    background: conic-gradient(from 200deg, var(--gold), var(--primary), var(--gold));
+    opacity: 0.16;
+  }
+
+  .card {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 420px;
+    background: rgba(255, 255, 255, 0.62);
+    backdrop-filter: blur(22px) saturate(160%);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 24px;
+    box-shadow: 0 24px 70px rgba(120, 72, 30, 0.18), 0 2px 8px rgba(120, 72, 30, 0.08);
+    padding: 40px 36px 34px;
+  }
+
+  .card-logo { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 22px; }
+  .card-logo img { width: 42px; height: 42px; object-fit: contain; }
+  .card-logo-text { font-weight: 800; font-size: 19px; color: #262220; letter-spacing: -0.01em; }
+
+  h1 { margin: 0 0 6px; font-size: 22px; font-weight: 800; color: #262220; text-align: center; }
+  .sub { margin: 0 0 28px; font-size: 13.5px; color: #746e68; text-align: center; line-height: 1.5; }
+
+  .google-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 13px 16px;
+    border-radius: 12px;
+    border: 1px solid #ddd8d1;
+    background: #fff;
+    color: #262220;
+    font-family: inherit;
+    font-size: 14.5px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.15s ease, transform 0.1s ease;
+  }
+  .google-btn:hover { box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08); }
+  .google-btn:active { transform: scale(0.99); }
+  .google-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .google-btn svg { width: 19px; height: 19px; flex-shrink: 0; }
+
+  .status {
+    margin-top: 16px;
+    font-size: 13px;
+    text-align: center;
+    line-height: 1.5;
+    display: none;
+  }
+  .status.error { display: block; color: #b42318; }
+  .status.info { display: block; color: #746e68; }
+
+  .footnote {
+    margin-top: 26px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(38, 34, 32, 0.08);
+    font-size: 11.5px;
+    color: #8f887f;
+    text-align: center;
+    line-height: 1.5;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="card">
+  <div class="card-logo">
+    <img src="assets/images/logo-light.png" alt="Servi" />
+    <span class="card-logo-text">Servi Dashboard</span>
+  </div>
+
+  <h1>Welcome back</h1>
+  <p class="sub">Sign in with the Google account your team already uses. Only people already added to the dashboard can get in.</p>
+
+  <button type="button" class="google-btn" id="googleSignInBtn">
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+      <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+      <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+      <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+    </svg>
+    <span id="googleBtnLabel">Sign in with Google</span>
+  </button>
+
+  <p class="status" id="statusMsg"></p>
+
+  <p class="footnote">Access is limited to people already authorized on this dashboard. If you believe you should have access, contact whoever manages the dashboard for your team.</p>
+</div>
+
+<script src="https://accounts.google.com/gsi/client"></script>
+<script src="shared/authConfig.js"></script>
+<script src="shared/auth.js"></script>
+<script>
+  (function () {
+    const btn = document.getElementById("googleSignInBtn");
+    const btnLabel = document.getElementById("googleBtnLabel");
+    const statusEl = document.getElementById("statusMsg");
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+
+    function showStatus(message, kind) {
+      statusEl.textContent = message;
+      statusEl.className = "status " + (kind || "info");
+    }
+
+    function goToDashboard() {
+      const target = next && /^[\w-]+\.html$/.test(next) ? next : "overview.html";
+      window.location.href = `dashboard/${target}`;
+    }
+
+    // Already signed in this tab with a valid, authorized session? Skip
+    // the form entirely.
+    if (Auth.restoreSession()) {
+      goToDashboard();
+      return;
+    }
+
+    try {
+      Auth.init();
+    } catch (e) {
+      btn.disabled = true;
+      btnLabel.textContent = "Sign-in unavailable";
+      showStatus(e.message, "error");
+    }
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btnLabel.textContent = "Signing in…";
+      showStatus("", "");
+      try {
+        await Auth.signIn();
+        goToDashboard();
+      } catch (e) {
+        btn.disabled = false;
+        btnLabel.textContent = "Sign in with Google";
+        if (e.code === "NOT_AUTHORIZED") {
+          showStatus(`${e.message} Ask whoever manages the dashboard to add your email.`, "error");
+        } else {
+          showStatus(e.message || "Sign-in failed. Try again.", "error");
+        }
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>
