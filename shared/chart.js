@@ -239,6 +239,17 @@ const Chart = (() => {
   // horizontal slivers, which is what an honest horizontal-bar rendering
   // of a 30-day daily trend looks like without inventing a different data
   // shape than the line/bar versions use.
+  // Rough "does this label fit in `px` pixels" estimate for the left-axis
+  // labels below — good enough to size the gutter and decide when to
+  // truncate without needing a live DOM/canvas measurement. ~5.6px/char is
+  // a reasonable average for the 10px Inter axis-label font.
+  function truncateLabel(label, px) {
+    const str = String(label == null ? "" : label);
+    const maxChars = Math.max(3, Math.floor(px / 5.6));
+    if (str.length <= maxChars) return { text: str, truncated: false };
+    return { text: str.slice(0, maxChars - 1).trimEnd() + "…", truncated: true };
+  }
+
   function hBarChart(container, points, opts) {
     const o = opts || {};
     const tone = o.tone || "primary";
@@ -251,7 +262,14 @@ const Chart = (() => {
       return;
     }
     const width = Math.max(280, container.clientWidth || 600);
-    const padding = { top: 10, right: 44, bottom: 10, left: 70 };
+    // Wider label gutter is available on request (e.g. full vertical names
+    // like "Sport Coaches and Trainers") — still capped and truncated with
+    // an ellipsis + native tooltip rather than letting long labels run past
+    // the chart's own left edge, which is what happened before this was
+    // configurable (every label used a fixed 70px gutter regardless of
+    // content).
+    const labelGutter = o.labelWidth || 70;
+    const padding = { top: 10, right: 44, bottom: 10, left: labelGutter };
     const innerW = width - padding.left - padding.right;
     const max = Math.max(1, ...shown.map((p) => p.count));
 
@@ -259,8 +277,12 @@ const Chart = (() => {
       .map((p, i) => {
         const y = padding.top + i * rowH;
         const barW = Math.max(1, (p.count / max) * innerW);
+        const fit = truncateLabel(p.label, padding.left - 12);
+        const labelEl = fit.truncated
+          ? `<title>${p.label}</title>${fit.text}`
+          : fit.text;
         return `
-          <text x="${padding.left - 8}" y="${y + rowH / 2 + 4}" class="chart-axis-label" text-anchor="end">${p.label}</text>
+          <text x="${padding.left - 8}" y="${y + rowH / 2 + 4}" class="chart-axis-label" text-anchor="end">${labelEl}</text>
           <rect x="${padding.left}" y="${y + 5}" width="${innerW}" height="${rowH - 10}" rx="4" class="chart-hbar-track" />
           <rect x="${padding.left}" y="${y + 5}" width="${barW}" height="${rowH - 10}" rx="4" class="chart-bar tone-${tone}" data-index="${points.indexOf(p)}" />
           <text x="${padding.left + barW + 8}" y="${y + rowH / 2 + 4}" class="chart-hbar-value">${p.count}</text>`;

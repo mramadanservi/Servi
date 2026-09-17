@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Sources — Academies & Institutions — Sources</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Academies & Institutions — Sources</h1>
+      <p class="page-subheading">Schools, training academies and certification bodies tracked as Servi sources — a warm path to freelancers they’ve already trained.</p>
+    </div>
+  </div>
+
+  <div class="src-notice src-notice-compact">
+    <span class="src-notice-icon" id="srcNoticeIcon"></span>
+    <span><strong>Snapshot, not live yet.</strong> Computed from the Academies & Institutions sheet as of Sep 17, 2026 — read-only, same as Leads and Applied.</span>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2>At a glance</h2>
+      <span class="ov-hint">Across every Academies & Institutions source tracked</span>
+    </div>
+    <div class="ov-kpi-row cols-5" id="srcKpiRow"></div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Coverage by vertical</h2>
+          <span class="ov-hint">How this source type covers each of the 9 verticals</span>
+        </div>
+        <div class="src-vbox-grid" id="srcVboxGrid"></div>
+      </section>
+
+      <section class="ov-card leads-filter-card">
+        <div class="ov-card-header">
+          <h2>Filter &amp; sort</h2>
+          <span class="ov-hint">Applies to the list below</span>
+        </div>
+        <div class="leads-filter-bar">
+          <div class="leads-filter-selects">
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Vertical</span>
+              <button type="button" id="srcVerticalMs"></button>
+            </div>
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Contacted</span>
+              <button type="button" id="srcContactedMs"></button>
+            </div>
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Sort by</span>
+              <select id="srcSortSelect">
+                <option value="nameAsc">Name (A–Z)</option>
+                <option value="contactedFirst">Contacted first</option>
+                <option value="notContactedFirst">Not contacted first</option>
+              </select>
+            </div>
+            <button type="button" class="leads-clear-btn" id="srcClearFiltersBtn">Clear filters</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="ov-card leads-table-card">
+        <div class="ov-card-header">
+          <h2>All Academies & Institutions</h2>
+          <span class="ov-hint" id="srcTableHint"></span>
+        </div>
+        <div class="leads-table-toolbar">
+          <label class="leads-search-wrap">
+            <span id="srcSearchIcon"></span>
+            <input type="text" id="srcTableSearch" placeholder="Search name, admin, phone…" />
+          </label>
+        </div>
+        <div class="leads-table-scroll">
+          <table class="leads-table" id="srcTable">
+            <thead>
+              <tr>
+                <th data-sort="name">Name</th>
+                <th>Vertical(s)</th>
+                <th class="src-followers-col" data-sort="followers">Followers</th>
+                <th>Admin / Contact</th>
+                <th>Phone</th>
+                <th data-sort="contacted">Contacted</th>
+                <th>Notes / Link</th>
+              </tr>
+            </thead>
+            <tbody id="srcTableBody"></tbody>
+          </table>
+        </div>
+        <div class="leads-table-pagination" id="srcTablePagination"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Academies & Institutions by vertical</h2>
+          <span class="ov-hint">Visual breakdown of where these sources come from</span>
+        </div>
+        <div class="chart-wrap" id="srcChart"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="srcInsights"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/multiSelect.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sourcesData.js"></script>
+<script src="../shared/chart.js"></script>
+<script src="../shared/sourceTypePage.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     ACADEMIES_ENTITIES — snapshot dataset, not invented
+     ------------------------------------------------------------
+     Every row below was extracted from the real Excel export of the
+     Academies & Institutions source list (26 rows). Same "snapshot, not
+     live yet" status as every other Sources page — once this list is
+     a connected live Google Sheet, this constant gets replaced by a
+     SheetsClient fetch the same way fetchAll()/fetchApplied() work.
+     Field shape: { name, verticals[], link, followers, contacted
+     (true/false/null — null/blank means "unknown", NOT "no"),
+     adminName, phone, email, status, area, notes }.
+     ============================================================ */
+  const ACADEMIES_ENTITIES = [{"name": "CIS", "verticals": ["Tutors", "Caregivers", "Beauty Services"], "link": "CIS College", "followers": null, "contacted": true, "adminName": "", "phone": "81 709 770", "email": "", "status": "FUP Call", "area": "Ghobeiry", "notes": "Called Hiba from CIS; she referred us to Career Services. FUP", "posted": false}, {"name": "Leaders Training Center", "verticals": ["Sport Coaches and Trainers", "Beauty Services"], "link": "Leaders Training Center | Beirut", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "CSB Academy", "verticals": ["Beauty Services"], "link": "CSB Academy", "followers": null, "contacted": true, "adminName": "Mohammad Bayram", "phone": "", "email": "", "status": "Send Freelancer Application Communication", "area": "", "notes": "No contact information can be provided; however, they can share broadcasts to their community.", "posted": false}, {"name": "Lebanese Academy of Beauty", "verticals": ["Beauty Services"], "link": "Lebanese Academy of Beauty", "followers": null, "contacted": null, "adminName": "", "phone": "03 497 756", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "LAU ACE", "verticals": ["Tutors", "Sport Coaches and Trainers", "Home-Based Therapists"], "link": "Education and Inclusion LAU ACE", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "BLC", "verticals": ["Tutors"], "link": "BLC - British Language Centre", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "Inspire", "verticals": ["Sport Coaches and Trainers"], "link": "Inspire", "followers": null, "contacted": true, "adminName": "Carole Fileflel", "phone": "71 440 448", "email": "", "status": "FUP Call", "area": "", "notes": "They requested to send an email to management explaining more about servi, open to communicating. lebsupport@inspire.edu.lb", "posted": false}, {"name": "ISSA", "verticals": ["Sport Coaches and Trainers"], "link": "International Sports Sciences Association", "followers": null, "contacted": true, "adminName": "Rudy Sleiman", "phone": "03 238 180", "email": "", "status": "No Answer, FUP", "area": "", "notes": "", "posted": false}, {"name": "National PT", "verticals": ["Sport Coaches and Trainers"], "link": "https://nationalpti.org/school/lebanon/", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "IFPA", "verticals": ["Sport Coaches and Trainers"], "link": "IFPA Lebanon", "followers": null, "contacted": true, "adminName": "Hassan Karnib", "phone": "70 917 676", "email": "", "status": "FUP Call", "area": "", "notes": "Contacted Rita, who referred us to director Dr. Hassan Karneeb.", "posted": false}, {"name": "Aesthetic World Academy", "verticals": ["Beauty Services"], "link": "Cosmetology Course In Lebanon", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "L.N.H.C.M", "verticals": ["Music and Art Instructors"], "link": "LNGCM", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "XploreTEFL", "verticals": ["Tutors"], "link": "TEFL", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "Step Ahead", "verticals": ["Sport Coaches and Trainers"], "link": "", "followers": null, "contacted": true, "adminName": "Wael Abou Samra", "phone": "71 018 250", "email": "", "status": "", "area": "", "notes": "Contacted Steap Ahead; was referred by Michael to further discuss a potential collaboration with Wael Abou Samra.", "posted": false}, {"name": "Makhzoumi Foundation", "verticals": ["Beauty Services"], "link": "Makhzoumi Foundation", "followers": null, "contacted": null, "adminName": "", "phone": "01 660 890", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "YWCA", "verticals": ["Tutors", "Beauty Services"], "link": "YWCA", "followers": null, "contacted": null, "adminName": "", "phone": "01 374 256", "email": "", "status": "", "area": "Beirut", "notes": "", "posted": false}, {"name": "SAS", "verticals": ["Sport Coaches and Trainers"], "link": "SAS", "followers": null, "contacted": null, "adminName": "", "phone": "05 920 019", "email": "", "status": "", "area": "Baabda", "notes": "", "posted": false}, {"name": "Beirut Arab University", "verticals": ["Sport Coaches and Trainers"], "link": "EREPS Accreditation | Beirut Arab University", "followers": null, "contacted": null, "adminName": "", "phone": "01 300 110 06 218 400", "email": "", "status": "", "area": "Beirut, Tripoli", "notes": "EREPS Accreditation", "posted": false}, {"name": "Antonine University", "verticals": ["Sport Coaches and Trainers"], "link": "UA-Faculty of Sports", "followers": null, "contacted": null, "adminName": "", "phone": "05 927 000 ext. 2501", "email": "", "status": "", "area": "Baabda", "notes": "", "posted": false}, {"name": "International House World Organization", "verticals": ["Tutors"], "link": "IH Beirut - International House World Organisation", "followers": null, "contacted": null, "adminName": "", "phone": "01 500 978", "email": "", "status": "", "area": "Sin el Fil", "notes": "", "posted": false}, {"name": "Alepos Academy", "verticals": ["Beauty Services"], "link": "Alepos Academy", "followers": null, "contacted": null, "adminName": "", "phone": "04 919 992", "email": "", "status": "", "area": "Mtayleb", "notes": "", "posted": false}, {"name": "Milo Beauty Center", "verticals": ["Beauty Services"], "link": "Milo Beauty Center", "followers": null, "contacted": null, "adminName": "", "phone": "09 916 701", "email": "", "status": "", "area": "Keserwan", "notes": "", "posted": false}, {"name": "Beit Chabab Technical Institute", "verticals": ["Caregivers", "Sport Coaches and Trainers"], "link": "Beit Chabab Technical Institutions", "followers": null, "contacted": null, "adminName": "", "phone": "04 981 818", "email": "", "status": "", "area": "Beit Chabab", "notes": "", "posted": false}, {"name": "Lebanese Academy of Beauty", "verticals": ["Beauty Services"], "link": "LAB Academy", "followers": null, "contacted": null, "adminName": "", "phone": "03 497 756", "email": "", "status": "", "area": "", "notes": "A Facebook group for Lebanese beauticians to find jobs, hire staff, access company offers, stay current on new techniques, and learn about beauty events.", "posted": false}, {"name": "VIBA Academy - Lebanon", "verticals": ["Beauty Services"], "link": "VIBA Academy", "followers": null, "contacted": null, "adminName": "", "phone": "04 719 917", "email": "", "status": "", "area": "", "notes": "VIBA, an ITEC-accredited beauty academy in Lebanon that trains beauticians and aestheticians in cosmetology, skin care, massage, and makeup.", "posted": false}, {"name": "Charmereine Beauty Academy", "verticals": ["Beauty Services"], "link": "Charmereine Beauty Academy", "followers": null, "contacted": null, "adminName": "", "phone": "01 805 594", "email": "", "status": "", "area": "", "notes": "Charmereine Beauty Academy offers programs that train people to become cosmetologists, estheticians.", "posted": false}];
+
+  SourceTypePage.init({
+    entities: ACADEMIES_ENTITIES,
+    sourceType: "Academies & Institutions",
+    icon: "building-2",
+    hasReach: false,
+    sortDefault: "nameAsc",
+    kpi3: {
+      label: "Fully Documented",
+      icon: "check",
+      substitute: true,
+      tooltip: "No literal \u201cApproved\u201d status exists for Academies yet \u2014 shown instead: academies with both a named contact and a phone number on file.",
+      compute: (rows) => rows.filter((e) => e.adminName && e.phone).length,
+    },
+    kpi4: {
+      label: "In Active Follow-Up",
+      icon: "clock",
+      substitute: true,
+      tooltip: "No \u201cposted\u201d step applies to Academies \u2014 shown instead: academies where a follow-up call or an application/communication packet is already in motion.",
+      compute: (rows) => rows.filter((e) => /fup|communication/i.test(e.status || "")).length,
+    },
+    vboxExtra: {
+      label: "Documented",
+      compute: (list) => list.filter((e) => e.adminName && e.phone).length,
+    },
+  });
+
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    AppShell.init({ current: "sources-academies", root: ".." });
+  }
+</script>
+
+</body>
+</html>

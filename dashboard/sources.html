@@ -9,17 +9,85 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../shared/shell.css" />
+<script src="https://accounts.google.com/gsi/client"></script>
 </head>
 
 <body>
 
 <main id="pageBody" hidden>
-  <h1 class="page-heading">Sources</h1>
-  <p class="page-subheading">Where leads are coming from.</p>
-  <div class="placeholder-card">
-    <div class="placeholder-card-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 12h4" /> <path d="M10 8h4" /> <path d="M14 21v-3a2 2 0 0 0-4 0v3" /> <path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2" /> <path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" /></svg></div>
-    <h2>Coming in a later phase</h2>
-    <p>Not a priority yet per your notes — will be kept clean and consistent with the rest of the dashboard once we get to it.</p>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Sources</h1>
+      <p class="page-subheading">Where we find freelancers for each vertical, and how much reach we have overall.</p>
+    </div>
+  </div>
+
+  <div class="src-notice">
+    <span class="src-notice-icon" id="srcNoticeIcon"></span>
+    <span><strong>Snapshot data, not live yet.</strong> The numbers below are computed from the source lists you shared (Facebook Groups, Academies &amp; Institutions, Syndicates, Freelancer Platforms, Tutoring Centers, Nursing Schools/Programs) as of Sep 17, 2026. Once each one is connected as a live Google Sheet, this page will read them the same read-only way Leads and Applied already do, and these numbers will stay current automatically.</span>
+  </div>
+
+  <!-- ============== GENERAL OVERVIEW ============== -->
+  <div id="srcGeneralOverview">
+    <section class="ov-card ov-leads-overview">
+      <div class="ov-card-header">
+        <h2>General Overview</h2>
+        <span class="ov-hint">Totals across all specific-source lists — open a vertical from the Sources menu on the left for its actual sources, links and contacts</span>
+      </div>
+      <div class="src-explainer">
+        <span class="src-explainer-icon" id="srcExplainerIcon"></span>
+        <span><strong>What "source" means here:</strong> any single Facebook Group, Academy, Syndicate, Freelancer Platform, Tutoring Center or Nursing School we've catalogued as a place to find freelancers — not a freelancer themselves. One source can be tagged to more than one vertical (e.g. a general parenting Facebook group might cover both Baby Sitters and Caregivers), so it's counted once in each.</span>
+      </div>
+      <div class="ov-kpi-row" id="srcKpiRow"></div>
+    </section>
+
+    <section class="ov-card leads-filter-card">
+      <div class="ov-card-header">
+        <h2>Filter</h2>
+        <span class="ov-hint">Applies to the breakdown grid and insights below — not the KPI row above</span>
+      </div>
+      <div class="leads-filter-bar">
+        <div class="leads-filter-selects">
+          <div class="leads-select-wrap">
+            <span class="leads-select-label">Source Type</span>
+            <button type="button" id="srcSourceTypeMs"></button>
+          </div>
+          <div class="leads-select-wrap">
+            <span class="leads-select-label">Vertical</span>
+            <button type="button" id="srcVerticalMs"></button>
+          </div>
+          <div class="leads-select-wrap">
+            <span class="leads-select-label">Coverage</span>
+            <button type="button" id="srcCoverageMs"></button>
+          </div>
+          <button type="button" class="leads-clear-btn" id="srcClearFiltersBtn">Clear filters</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="leads-layout">
+      <div class="leads-main">
+        <section class="ov-card">
+          <div class="ov-card-header">
+            <h2>🎯 Sources per Vertical — where are we thin?</h2>
+            <span class="ov-hint">Click a box for the per-source-type breakdown · a source tagged to more than one vertical counts in each</span>
+          </div>
+          <div class="ov-vertical-grid" id="srcVerticalGrid"></div>
+        </section>
+      </div>
+
+      <div class="leads-side">
+        <section class="ov-card">
+          <div class="ov-card-header"><h2>Source Types</h2></div>
+          <div class="src-type-list" id="srcTypeList"></div>
+        </section>
+
+        <section class="ov-card">
+          <div class="ov-card-header"><h2>AI Insights</h2></div>
+          <div id="srcInsights"></div>
+        </section>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -32,12 +100,215 @@
 <script src="../shared/sheetsClient.js"></script>
 <script src="../shared/calendar.js"></script>
 <script src="../shared/taskSheet.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/multiSelect.js"></script>
 <script src="../shared/i18n.js"></script>
+<script src="../shared/sourcesData.js"></script>
 <script src="../shared/sidebar.js"></script>
 <script>
+  // All the raw data + aggregation helpers now live in shared/sourcesData.js
+  // (SourcesData.ENTITIES/OTHER_BUCKET/SOURCE_TYPES/computeVerticalStats/
+  // computeCoverageTiers/TIER_LABEL) so this page and the 9 vertical pages
+  // (sources-tutors.html + the 8 sources-*.html placeholders) all read the
+  // exact same numbers instead of each keeping their own copy.
+  const { ENTITIES: SOURCE_ENTITIES, OTHER_BUCKET, SOURCE_TYPES, SOURCE_TYPE_EXPLAINERS, TIER_LABEL, TIER_EXPLAINER, escapeHtml, computeVerticalStats, computeCoverageTiers } = SourcesData;
+
+  const srcState = { filters: { sourceTypes: [], verticals: [], coverage: [] } };
+
+  /* ---------------- filtering ---------------- */
+
+  function filteredEntities() {
+    const { sourceTypes, verticals, coverage } = srcState.filters;
+    const coverageByVertical = srcState.coverageByVertical || {};
+    return SOURCE_ENTITIES.filter((e) => {
+      if (sourceTypes.length && !sourceTypes.includes(e.sourceType)) return false;
+      if (verticals.length && !e.verticals.some((v) => verticals.includes(v))) return false;
+      if (coverage.length && !e.verticals.some((v) => coverage.includes(coverageByVertical[v]))) return false;
+      return true;
+    });
+  }
+
+  /* ---------------- KPI row ---------------- */
+
+  function renderKpis(entities, stats) {
+    const labels = DataStore.VERTICALS.map((v) => v.label);
+    const totalSources = entities.length;
+    const rankedDesc = labels.slice().sort((a, b) => stats[b].count - stats[a].count);
+    const mostPopular = rankedDesc[0];
+    const leastPopular = rankedDesc[rankedDesc.length - 1];
+    const totalReach = entities.reduce((s, e) => s + (e.reach || 0), 0);
+    const untagged = stats[OTHER_BUCKET].count;
+
+    const cards = [
+      { tone: "leads", icon: "bar-chart-2", value: totalSources.toLocaleString(), label: "TOTAL SOURCES TRACKED", sub: `every Facebook Group, Academy, Syndicate, Freelancer Platform, Tutoring Center & Nursing School we've catalogued, across all 9 verticals` },
+      { tone: "indigo", icon: "list-checks", value: String(SOURCE_TYPES.length), label: "SOURCE TYPES", sub: "the 6 different kinds of list this page combines — Facebook Groups, Academies, Syndicates, Platforms, Tutoring Centers, Nursing Schools" },
+      { tone: "teal", icon: "trending-up", value: mostPopular, label: "MOST POPULAR VERTICAL", sub: `the vertical with the most sources mapped: ${stats[mostPopular].count.toLocaleString()} of them`, big: true },
+      { tone: "red", icon: "target", value: leastPopular, label: "NEEDS THE MOST ATTENTION", sub: `the vertical with the fewest sources mapped — just ${stats[leastPopular].count.toLocaleString()}, worth scouting more`, big: true },
+      { tone: "calls", icon: "globe", value: totalReach >= 1000 ? Math.round(totalReach / 1000).toLocaleString() + "K" : String(totalReach), label: "COMBINED REACH", sub: "total followers across every Facebook Group source — the only source type that tracks an audience size" },
+      { tone: "applied", icon: "help-circle", value: untagged.toLocaleString(), label: "NOT YET VERTICAL-TAGGED", sub: "sources that don't clearly belong to one of the 9 verticals yet — review these when you get a chance" },
+    ];
+
+    document.getElementById("srcKpiRow").innerHTML = cards
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}" title="${escapeHtml(c.label)}: ${escapeHtml(c.sub)}">
+        <div class="ov-kpi-top"><div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div></div>
+        <div class="ov-kpi-value${c.big ? " kpi-value-text" : ""}">${escapeHtml(c.value)}</div>
+        <div class="ov-kpi-label">${escapeHtml(c.label)} &middot; ${escapeHtml(c.sub)}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- per-vertical grid (click to expand) ---------------- */
+
+  function renderVerticalGrid(entities, stats, tierOf) {
+    const boxes = DataStore.VERTICALS.map((v) => ({ key: v.key, label: v.label, icon: v.icon })).concat([
+      { key: OTHER_BUCKET, label: OTHER_BUCKET, icon: "help-circle" },
+    ]);
+    const grid = document.getElementById("srcVerticalGrid");
+    grid.innerHTML = boxes
+      .map((v) => {
+        const s = stats[v.label];
+        const tier = tierOf[v.label];
+        const bySourceRows = SOURCE_TYPES.filter((st) => s.bySourceType[st])
+          .map(
+            (st) => `<div class="ov-vertical-detail-item"><div class="ov-vertical-detail-value">${s.bySourceType[st]}</div><div class="ov-vertical-detail-label">${escapeHtml(st)}</div></div>`
+          )
+          .join("");
+        return `
+        <div class="ov-vertical-box src-tone-${tier}" data-vertical="${escapeHtml(v.label)}" title="${escapeHtml(v.label)} — click for the source-type breakdown">
+          <div class="ov-vertical-box-head">
+            <span class="ov-vertical-box-icon">${Icons.svg(v.icon, { size: 14 })}</span>
+            <span class="ov-vertical-box-label">${escapeHtml(v.label)}</span>
+          </div>
+          <div class="ov-vertical-box-count">${s.count}</div>
+          <div class="ov-vertical-box-count-label">sources</div>
+          <span class="src-coverage-pill" title="${escapeHtml(TIER_EXPLAINER[tier] || "")}">${TIER_LABEL[tier]}</span>
+          <div class="ov-vertical-box-detail">${bySourceRows || `<div class="ov-vertical-detail-item"><div class="ov-vertical-detail-label">No sources tagged to this vertical yet</div></div>`}</div>
+        </div>`;
+      })
+      .join("");
+
+    grid.querySelectorAll(".ov-vertical-box").forEach((box) => {
+      box.addEventListener("click", () => {
+        const wasExpanded = box.classList.contains("expanded");
+        grid.querySelectorAll(".ov-vertical-box.expanded").forEach((b) => b.classList.remove("expanded"));
+        if (!wasExpanded) box.classList.add("expanded");
+      });
+    });
+  }
+
+  /* ---------------- source types side panel (structural, not filter-reactive) ---------------- */
+
+  function renderSourceTypesList() {
+    const counts = {};
+    SOURCE_TYPES.forEach((t) => (counts[t] = 0));
+    SOURCE_ENTITIES.forEach((e) => (counts[e.sourceType] = (counts[e.sourceType] || 0) + 1));
+    document.getElementById("srcTypeList").innerHTML = SOURCE_TYPES.map(
+      (t) => `
+      <div class="src-type-row" title="${escapeHtml(SOURCE_TYPE_EXPLAINERS[t] || "")}">
+        <span class="src-type-name"><span class="src-status-dot" title="Snapshot — not yet a connected live Sheet"></span>${escapeHtml(t)}</span>
+        <span><span class="src-type-count">${counts[t]}</span> <span class="src-type-status">snapshot</span></span>
+      </div>`
+    ).join("");
+  }
+
+  /* ---------------- AI insights (rule-based, from real numbers) ---------------- */
+
+  function renderInsights(entities, stats, tierOf) {
+    const insights = [];
+    const labels = DataStore.VERTICALS.map((v) => v.label);
+    const rankedAsc = labels.slice().sort((a, b) => stats[a].count - stats[b].count);
+    const thin = rankedAsc[0];
+    insights.push({ tone: "red", icon: "target", html: `<strong>${escapeHtml(thin)}</strong> has the fewest sources of any vertical (${stats[thin].count}) — open its tab in the Sources menu to see who's already there, or start scouting new ones.` });
+
+    // Any vertical that's 70%+ reliant on a single source type is a
+    // concentration risk worth flagging, regardless of its raw total.
+    labels.forEach((label) => {
+      const s = stats[label];
+      if (!s.count) return;
+      const top = Object.entries(s.bySourceType).sort((a, b) => b[1] - a[1])[0];
+      if (top && top[1] / s.count >= 0.7 && s.count >= 10) {
+        insights.push({
+          tone: "amber",
+          icon: "trending-down",
+          html: `<strong>${escapeHtml(label)}</strong> leans heavily on ${escapeHtml(top[0])} (${top[1]} of ${s.count} sources) — worth diversifying so one list drying up doesn't hurt this vertical.`,
+        });
+      }
+    });
+
+    const untagged = stats[OTHER_BUCKET].count;
+    if (untagged > 0) {
+      insights.push({ tone: "amber", icon: "help-circle", html: `<strong>${untagged}</strong> sources across Facebook Groups, Syndicates and Freelancer Platforms aren't tagged to a specific vertical yet — worth a pass to see which ones actually belong somewhere.` });
+    }
+
+    const strongCount = labels.filter((l) => tierOf[l] === "strong").length;
+    insights.push({ tone: "green", icon: "trending-up", html: `${strongCount} of 9 verticals have strong source coverage right now — combined across all ${SOURCE_TYPES.length} specific-source types, not any single list.` });
+
+    document.getElementById("srcInsights").innerHTML = insights
+      .slice(0, 4)
+      .map((i) => `<div class="ov-insight-row ov-insight-tone-${i.tone}"><span class="ov-insight-icon">${Icons.svg(i.icon, { size: 15 })}</span><span class="ov-insight-text">${i.html}</span></div>`)
+      .join("");
+  }
+
+  /* ---------------- filters ---------------- */
+
+  function renderAll() {
+    const entities = filteredEntities();
+    const statsForTiers = computeVerticalStats(SOURCE_ENTITIES); // tiers are judged against the WHOLE picture, not a filtered slice
+    const tierOf = computeCoverageTiers(statsForTiers);
+    srcState.coverageByVertical = tierOf;
+    const stats = computeVerticalStats(entities);
+    renderKpis(entities, stats);
+    renderVerticalGrid(entities, stats, tierOf);
+    renderInsights(entities, stats, tierOf);
+  }
+
+  function initFilters() {
+    // Keep the 3 MultiSelect instances around so "Clear filters" can call
+    // their own updateLabel() — the same relabel/ms-active logic the
+    // widget already uses on every Apply — instead of re-implementing it
+    // by hand here.
+    const sourceTypeMs = MultiSelect.attach(document.getElementById("srcSourceTypeMs"), {
+      getOptions: () => SOURCE_TYPES.map((t) => ({ value: t, label: t })),
+      getSelected: () => srcState.filters.sourceTypes,
+      onApply: (values) => { srcState.filters.sourceTypes = values; renderAll(); },
+      placeholder: "All",
+    });
+    const verticalMs = MultiSelect.attach(document.getElementById("srcVerticalMs"), {
+      getOptions: () => DataStore.VERTICALS.map((v) => ({ value: v.label, label: v.label })).concat([{ value: OTHER_BUCKET, label: OTHER_BUCKET }]),
+      getSelected: () => srcState.filters.verticals,
+      onApply: (values) => { srcState.filters.verticals = values; renderAll(); },
+      placeholder: "All",
+    });
+    const coverageMs = MultiSelect.attach(document.getElementById("srcCoverageMs"), {
+      getOptions: () => [
+        { value: "focus", label: "Needs focus" },
+        { value: "moderate", label: "Moderate" },
+        { value: "strong", label: "Strong" },
+      ],
+      getSelected: () => srcState.filters.coverage,
+      onApply: (values) => { srcState.filters.coverage = values; renderAll(); },
+      placeholder: "All",
+    });
+    document.getElementById("srcClearFiltersBtn").addEventListener("click", () => {
+      srcState.filters = { sourceTypes: [], verticals: [], coverage: [] };
+      [sourceTypeMs, verticalMs, coverageMs].forEach((ms) => ms.updateLabel());
+      renderAll();
+    });
+  }
+
+  /* ---------------- bootstrap ---------------- */
+
   Theme.init();
   if (Auth.requireLogin("..")) {
-    AppShell.init({ current: "sources", root: ".." });
+    AppShell.init({ current: "sources-overview", root: ".." });
+    document.getElementById("srcNoticeIcon").innerHTML = Icons.svg("gauge", { size: 16 });
+    document.getElementById("srcExplainerIcon") && (document.getElementById("srcExplainerIcon").innerHTML = Icons.svg("help-circle", { size: 15 }));
+    renderSourceTypesList();
+    initFilters();
+    renderAll();
   }
 </script>
 

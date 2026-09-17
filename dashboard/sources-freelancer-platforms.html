@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Sources — Freelancer Platforms — Sources</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Freelancer Platforms — Sources</h1>
+      <p class="page-subheading">Existing freelance marketplaces tracked as Servi sources — where the freelancers we want are already listing their services.</p>
+    </div>
+  </div>
+
+  <div class="src-notice src-notice-compact">
+    <span class="src-notice-icon" id="srcNoticeIcon"></span>
+    <span><strong>Snapshot, not live yet.</strong> Computed from the Freelancer Platforms sheet as of Sep 17, 2026 — read-only, same as Leads and Applied.</span>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2>At a glance</h2>
+      <span class="ov-hint">Across every Freelancer Platforms source tracked</span>
+    </div>
+    <div class="ov-kpi-row cols-5" id="srcKpiRow"></div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Coverage by vertical</h2>
+          <span class="ov-hint">How this source type covers each of the 9 verticals</span>
+        </div>
+        <div class="src-vbox-grid" id="srcVboxGrid"></div>
+      </section>
+
+      <section class="ov-card leads-filter-card">
+        <div class="ov-card-header">
+          <h2>Filter &amp; sort</h2>
+          <span class="ov-hint">Applies to the list below</span>
+        </div>
+        <div class="leads-filter-bar">
+          <div class="leads-filter-selects">
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Vertical</span>
+              <button type="button" id="srcVerticalMs"></button>
+            </div>
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Contacted</span>
+              <button type="button" id="srcContactedMs"></button>
+            </div>
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Sort by</span>
+              <select id="srcSortSelect">
+                <option value="nameAsc">Name (A–Z)</option>
+                <option value="contactedFirst">Contacted first</option>
+                <option value="notContactedFirst">Not contacted first</option>
+              </select>
+            </div>
+            <button type="button" class="leads-clear-btn" id="srcClearFiltersBtn">Clear filters</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="ov-card leads-table-card">
+        <div class="ov-card-header">
+          <h2>All Freelancer Platforms</h2>
+          <span class="ov-hint" id="srcTableHint"></span>
+        </div>
+        <div class="leads-table-toolbar">
+          <label class="leads-search-wrap">
+            <span id="srcSearchIcon"></span>
+            <input type="text" id="srcTableSearch" placeholder="Search name, admin, phone…" />
+          </label>
+        </div>
+        <div class="leads-table-scroll">
+          <table class="leads-table" id="srcTable">
+            <thead>
+              <tr>
+                <th data-sort="name">Name</th>
+                <th>Vertical(s)</th>
+                <th class="src-followers-col" data-sort="followers">Followers</th>
+                <th>Admin / Contact</th>
+                <th>Phone</th>
+                <th data-sort="contacted">Contacted</th>
+                <th>Notes / Link</th>
+              </tr>
+            </thead>
+            <tbody id="srcTableBody"></tbody>
+          </table>
+        </div>
+        <div class="leads-table-pagination" id="srcTablePagination"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Freelancer Platforms by vertical</h2>
+          <span class="ov-hint">Visual breakdown of where these sources come from</span>
+        </div>
+        <div class="chart-wrap" id="srcChart"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="srcInsights"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/multiSelect.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sourcesData.js"></script>
+<script src="../shared/chart.js"></script>
+<script src="../shared/sourceTypePage.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     FREELANCER_PLATFORMS_ENTITIES — snapshot dataset, not invented
+     ------------------------------------------------------------
+     Every row below was extracted from the real Excel export of the
+     Freelancer Platforms source list (47 rows). Same "snapshot, not
+     live yet" status as every other Sources page — once this list is
+     a connected live Google Sheet, this constant gets replaced by a
+     SheetsClient fetch the same way fetchAll()/fetchApplied() work.
+     Field shape: { name, verticals[], link, followers, contacted
+     (true/false/null — null/blank means "unknown", NOT "no"),
+     adminName, phone, email, status, area, notes }.
+     ============================================================ */
+  const FREELANCER_PLATFORMS_ENTITIES = [{"name": "Preply", "verticals": ["Tutors"], "link": "preply.com", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Messaging through the website", "posted": false}, {"name": "Italki", "verticals": ["Tutors"], "link": "https://www.italki.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Messaging through the website", "posted": false}, {"name": "AmazingTalker", "verticals": ["Tutors"], "link": "https://en.amazingtalker.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Messaging through the website", "posted": false}, {"name": "Tutoroo", "verticals": ["Tutors"], "link": "https://www.tutoroo.co/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Messaging through the website, Lebanese tutors living abroad", "posted": false}, {"name": "Classgap", "verticals": ["Tutors"], "link": "https://www.classgap.com/en", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Messaging through the website", "posted": false}, {"name": "Superprof", "verticals": ["Tutors"], "link": "https://www.superprof.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Non-Lebanese Tutors", "posted": false}, {"name": "Cambly (Arabic)", "verticals": ["Tutors"], "link": "https://www.cambly.com/en/subscribe?lang=ar", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Non-Lebanese Tutors", "posted": false}, {"name": "Clickcoach", "verticals": ["Sport Coaches and Trainers"], "link": "https://clickcoach.app/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "Yes", "area": "", "notes": "Numbers are available to call", "posted": false}, {"name": "Beelancers", "verticals": ["Tutors", "Sport Coaches and Trainers"], "link": "https://beelancers.com/categories/HOME", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "-", "posted": false}, {"name": "Skillscore", "verticals": ["Sport Coaches and Trainers", "Tutors", "Home-Based Therapists", "Beauty Services"], "link": "https://skillscoreapp.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "Yes", "area": "", "notes": "Numbers are availbale to call", "posted": false}, {"name": "Furrsati", "verticals": ["General / Other"], "link": "https://furrsati.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "No contact information", "posted": false}, {"name": "Tamayyuz", "verticals": ["Tutors"], "link": "https://tamayyoz.site/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Requests the tutor through Tamayyoz's whats app", "posted": false}, {"name": "Delne", "verticals": ["Baby Sitters and Nannies", "Beauty Services", "Music and Art Instructors", "Nurses", "Tutors", "Sport Coaches and Trainers"], "link": "https://www.dellne.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "Yes", "area": "", "notes": "Can directly call, but most are sotres", "posted": false}, {"name": "Sohhtak", "verticals": ["Nurses", "Home-Based Therapists"], "link": "https://sohhtak.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Can only book, no contact information", "posted": false}, {"name": "Apprentus", "verticals": ["Tutors"], "link": "https://www.apprentus.com/en/private-lessons/beirut-lebanon", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Messaging through the website, no phone numbers", "posted": false}, {"name": "Sideclick", "verticals": ["Pet Services"], "link": "https://sidelick.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Messaging through the website, no phone numbers", "posted": false}, {"name": "Mostaql", "verticals": ["Tutors"], "link": "https://mostaql.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Messaging through the website, no phone numbers", "posted": false}, {"name": "FindANurse", "verticals": ["Nurses"], "link": "https://www.findanurse.org/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Whats app in every profile is the website's contact and not the freelancer's", "posted": false}, {"name": "TherapyRoute", "verticals": ["Home-Based Therapists"], "link": "https://www.therapyroute.com/", "followers": null, "contacted": true, "adminName": "", "phone": "", "email": "", "status": "Yes", "area": "", "notes": "Can request number through profile if not available in biography, or message through the website.", "posted": false}, {"name": "Workana", "verticals": ["General / Other"], "link": "https://www.workana.com/work", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Information not available", "posted": false}, {"name": "Blabbik", "verticals": ["Baby Sitters and Nannies", "Beauty Services"], "link": "https://www.blabbik.com/en/", "followers": null, "contacted": true, "adminName": "", "phone": "", "email": "", "status": "Yes", "area": "", "notes": "Most are stores", "posted": false}, {"name": "maw3ad", "verticals": ["Beauty Services"], "link": "https://www.maw3ad.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Numbers accessible but mostly made up stores", "posted": false}, {"name": "freelancers-lb.com", "verticals": ["Pet Services"], "link": "https://www.freelancers-lb.com/browse", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Can access portfolio/LinkedIn, but there are only 9 freelancers on the entire webiste with different verticals", "posted": false}, {"name": "Petbacker", "verticals": ["Pet Services"], "link": "https://www.petbacker.com/s/pet-sitters/beirut--lebanon", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Can only submit a request through website", "posted": false}, {"name": "EduMatchLB", "verticals": ["Tutors"], "link": "https://www.edumatchlb.com/find-teachers", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Not active yet", "posted": false}, {"name": "SPAN", "verticals": ["Nurses", "Tutors", "Sport Coaches and Trainers", "Home-Based Therapists", "Beauty Services", "Baby Sitters and Nannies", "Caregivers", "Music and Art Instructors", "Pet Services"], "link": "https://span.it.com/about/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "IOS only App, message and call in app (must be connected/following), no numbers", "posted": false}, {"name": "Home Physiotherapy In Lebanon", "verticals": ["Home-Based Therapists"], "link": "https://physiotherapistinlebanon.com/specialties/home-physiotherapy", "followers": null, "contacted": true, "adminName": "", "phone": "", "email": "", "status": "Yes", "area": "", "notes": "Numbers available", "posted": false}, {"name": "BridaLeb", "verticals": ["Beauty Services"], "link": "https://www.bridaleb.com/marketplace/wedding-hair-and-makeup", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "Yes", "area": "", "notes": "Numbers available", "posted": false}, {"name": "Yelleb", "verticals": ["Sport Coaches and Trainers", "Nurses", "Baby Sitters and Nannies", "Beauty Services", "Caregivers", "Home-Based Therapists", "Music and Art Instructors", "Tutors"], "link": "Yelleb", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "Yes", "area": "", "notes": "Numbers available, but mostly stores", "posted": false}, {"name": "Medi-to-home", "verticals": ["Baby Sitters and Nannies", "Caregivers", "Home-Based Therapists", "Nurses"], "link": "https://meditohome.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "The company assigns you freelancers, you cant manually search for them", "posted": false}, {"name": "Yalatask", "verticals": ["Tutors", "Sport Coaches and Trainers"], "link": "https://www.yallatasks.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Numbers may be added by the freelancer in their bio, only found 1", "posted": false}, {"name": "Ma3ak", "verticals": ["General / Other"], "link": "https://ma3ak.com/#offerings", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "App needs onboarding", "posted": false}, {"name": "Octopus", "verticals": ["General / Other"], "link": "https://lb.expertini.com/jobs/in/octopus-social-marketplace-jobs-lebanon/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "", "posted": false}, {"name": "Ureed", "verticals": ["General / Other"], "link": "https://app.ureed.com/find-freelancers?keyword=&_gl=1*cqug8i*_gcl_au*MTAwOTc5Njg1NS4xNzg4MzM0MjA3*_ga*NTE1NjQ1NDMuMTc4ODMzNDIwNw..*_ga_LWW6CYXC4K*czE3ODgzMzQyMDYkbzEkZzAkdDE3ODgzMzQyMDYkajYwJGwwJGgw", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "area": "", "notes": "Potential verticals for phase 2. Contains whatsapp link but to number", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "(unnamed)", "verticals": ["General / Other"], "link": "", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}];
+
+  SourceTypePage.init({
+    entities: FREELANCER_PLATFORMS_ENTITIES,
+    sourceType: "Freelancer Platforms",
+    icon: "briefcase",
+    hasReach: false,
+    sortDefault: "nameAsc",
+    kpi3: {
+      label: "Fully Documented",
+      icon: "check",
+      substitute: true,
+      tooltip: "No literal \u201cApproved\u201d status exists for Freelancer Platforms yet \u2014 shown instead: platforms with both a named contact and a phone number on file (currently none \u2014 outreach here happens through each platform\u2019s own messaging system instead).",
+      compute: (rows) => rows.filter((e) => e.adminName && e.phone).length,
+    },
+    kpi4: {
+      label: "Serving 3+ Verticals",
+      icon: "target",
+      substitute: true,
+      tooltip: "No \u201cposted\u201d step applies to Freelancer Platforms \u2014 shown instead: platforms broad enough to be relevant across 3 or more verticals at once.",
+      compute: (rows) => rows.filter((e) => (e.verticals || []).length >= 3).length,
+    },
+    vboxExtra: {
+      label: "Documented",
+      compute: (list) => list.filter((e) => e.adminName && e.phone).length,
+    },
+  });
+
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    AppShell.init({ current: "sources-freelancer-platforms", root: ".." });
+  }
+</script>
+
+</body>
+</html>

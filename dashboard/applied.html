@@ -56,26 +56,26 @@
         <button type="button" data-preset="custom" id="appliedCustomRangeBtn" class="drp-trigger-btn" data-i18n="Custom Range">Custom Range</button>
       </div>
       <div class="leads-filter-selects">
-        <label class="leads-select-wrap">
+        <div class="leads-select-wrap">
           <span class="leads-select-label" data-i18n="District">District</span>
-          <select id="appliedDistrictSelect"><option value="">All</option></select>
-        </label>
-        <label class="leads-select-wrap">
+          <button type="button" id="appliedDistrictMs"></button>
+        </div>
+        <div class="leads-select-wrap">
           <span class="leads-select-label" data-i18n="Area">Area</span>
-          <select id="appliedAreaSelect"><option value="">All</option></select>
-        </label>
-        <label class="leads-select-wrap">
+          <button type="button" id="appliedAreaMs"></button>
+        </div>
+        <div class="leads-select-wrap">
           <span class="leads-select-label" data-i18n="Vertical">Vertical</span>
-          <select id="appliedVerticalSelect"><option value="">All</option></select>
-        </label>
-        <label class="leads-select-wrap">
+          <button type="button" id="appliedVerticalMs"></button>
+        </div>
+        <div class="leads-select-wrap">
           <span class="leads-select-label" data-i18n="Gender">Gender</span>
-          <select id="appliedGenderSelect"><option value="">All</option></select>
-        </label>
-        <label class="leads-select-wrap">
+          <button type="button" id="appliedGenderMs"></button>
+        </div>
+        <div class="leads-select-wrap">
           <span class="leads-select-label" data-i18n="Specialty">Specialty</span>
-          <select id="appliedSpecialtySelect"><option value="">All</option></select>
-        </label>
+          <button type="button" id="appliedSpecialtyMs"></button>
+        </div>
         <label class="leads-select-wrap" title="Only show applicants with at least this many years of experience in their primary applied category">
           <span class="leads-select-label" data-i18n="Min Years Exp.">Min Years Exp.</span>
           <input type="number" min="0" step="1" id="appliedMinYearsInput" placeholder="Any" />
@@ -96,13 +96,14 @@
       <section class="ov-card" id="appliedChartCard" hidden>
         <div class="ov-card-header">
           <h2>Applied Over Time</h2>
-          <span class="ov-hint">Last 30 days &middot; district/vertical/gender filters apply, date preset doesn't</span>
+          <span class="ov-hint">30-day window, or your Custom Range if one's applied &middot; drag the slider below to look further back &middot; district/vertical/gender/specialty filters apply, other date presets don't</span>
         </div>
         <div class="chart-summary">
           <span class="chart-summary-value" id="appliedChartTotal">0</span>
           <span class="chart-summary-label" id="appliedChartAvg">0/day avg</span>
         </div>
         <div class="chart-wrap" id="appliedChart"></div>
+        <div id="appliedChartTimeline"></div>
       </section>
 
       <section class="ov-card" id="appliedListCard" hidden>
@@ -169,9 +170,11 @@
 <script src="../shared/dataStore.js"></script>
 <script src="../shared/areaSettings.js"></script>
 <script src="../shared/specialtySettings.js"></script>
+<script src="../shared/multiSelect.js"></script>
 <script src="../shared/phoneFormat.js"></script>
 <script src="../shared/chartSettings.js"></script>
 <script src="../shared/chart.js"></script>
+<script src="../shared/timelineSlider.js"></script>
 <script src="../shared/legacyApplied.js"></script>
 <script src="../shared/i18n.js"></script>
 <script src="../shared/sidebar.js"></script>
@@ -213,7 +216,61 @@
     wireFilterBar();
     wireSortControl();
     wireAiAssistant();
+    wireChartTimeline();
     loadAppliedData();
+  }
+
+  /* ---------------- Applied Over Time timeline slider ----------------
+     Same widget/reasoning as calls.html's — see shared/timelineSlider.js
+     and that page's own comment. Bounded by the earliest submittedAt in
+     the (unfiltered) applicant list.
+
+     Same Custom Range takeover as calls.html: while a custom range is
+     applied, the chart shows exactly that range instead of a fixed 30
+     days, and the slider shows a locked summary of it — "Jump to today"
+     clears the custom range and hands control back to the drag slider. */
+
+  let appliedChartEndAnchor = new Date();
+  let appliedTimelineSlider = null;
+
+  function earliestAppliedDate() {
+    const withDate = appliedRecords.filter((r) => r.submittedAt);
+    if (!withDate.length) return null;
+    return withDate.reduce((min, r) => (r.submittedAt < min ? r.submittedAt : min), withDate[0].submittedAt);
+  }
+
+  function isCustomRangeActive() {
+    return appliedFilters.preset === "custom" && !!appliedFilters.customStart && !!appliedFilters.customEnd;
+  }
+
+  function fmtShort(d) {
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  function wireChartTimeline() {
+    appliedTimelineSlider = TimelineSlider.attach(document.getElementById("appliedChartTimeline"), {
+      getEarliestDate: earliestAppliedDate,
+      windowDays: 30,
+      onChange: (endAnchor) => {
+        appliedChartEndAnchor = endAnchor;
+        renderChart();
+      },
+      isLocked: isCustomRangeActive,
+      lockedLabel: () => `${fmtShort(appliedFilters.customStart)} – ${fmtShort(appliedFilters.customEnd)}`,
+      onUnlock: clearCustomRange,
+    });
+  }
+
+  // Shared by the slider's "Jump to today" (while locked) — mirrors what
+  // the plain preset buttons already do to appliedFilters.preset/
+  // customStart/customEnd.
+  function clearCustomRange() {
+    appliedFilters.preset = "all";
+    appliedFilters.customStart = null;
+    appliedFilters.customEnd = null;
+    document.getElementById("appliedCustomRangeBtn").textContent = "Custom Range";
+    document.querySelectorAll("#appliedDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+    renderAppliedFiltered();
   }
 
   /* ============================================================
@@ -299,12 +356,23 @@
      trend line, same reasoning as the Calls Over Time chart).
      ============================================================ */
 
+  // District/Area/Vertical/Gender/Specialty are all multi-select now (arrays
+  // of chosen values) — an empty array means "no restriction," same as the
+  // old "" single-select sentinel did. The date preset stays single-choice
+  // (a lead is either in a given window or it isn't), as do the numeric
+  // Min Years/Age filters below.
   const appliedFilters = {
-    preset: "all", district: "", area: "", vertical: "", gender: "", specialty: "", customStart: null, customEnd: null,
+    preset: "all", district: [], area: [], vertical: [], gender: [], specialty: [], customStart: null, customEnd: null,
     // New, for manual Booking filtering (per request: filter by years of
     // experience and an age range in addition to the existing filters).
     minYears: "", minAge: "", maxAge: "",
   };
+
+  // Populated by populateFilterOptions() below and read live by each
+  // MultiSelect's getOptions() callback (see leads.html for the same
+  // pattern).
+  const appliedFilterOptions = { district: [], area: [], vertical: [], gender: [], specialty: [] };
+  let appliedMs = null;
 
   // Same free-text-years parsing and "one headline experience figure per
   // person" logic as aiTools.js's search_freelancers tool — kept as its
@@ -337,11 +405,11 @@
   }
 
   function matchesNonDateFilters(r) {
-    if (appliedFilters.district && AreaSettings.canonicalize(r.district) !== appliedFilters.district) return false;
-    if (appliedFilters.area && AreaSettings.canonicalize(r.area) !== appliedFilters.area) return false;
-    if (appliedFilters.vertical && !DataStore.verticalsOf(r).includes(appliedFilters.vertical)) return false;
-    if (appliedFilters.gender && r.gender !== appliedFilters.gender) return false;
-    if (appliedFilters.specialty && !SpecialtySettings.matches(r, appliedFilters.specialty)) return false;
+    if (appliedFilters.district.length && !appliedFilters.district.includes(AreaSettings.canonicalize(r.district))) return false;
+    if (appliedFilters.area.length && !appliedFilters.area.includes(AreaSettings.canonicalize(r.area))) return false;
+    if (appliedFilters.vertical.length && !DataStore.verticalsOf(r).some((v) => appliedFilters.vertical.includes(v))) return false;
+    if (appliedFilters.gender.length && !appliedFilters.gender.includes(r.gender)) return false;
+    if (appliedFilters.specialty.length && !appliedFilters.specialty.some((s) => SpecialtySettings.matches(r, s))) return false;
     if (appliedFilters.minYears !== "") {
       const years = parseYearsNumber((primaryServiceDetail(r) || {}).years);
       if (years === null || years < Number(appliedFilters.minYears)) return false;
@@ -372,22 +440,26 @@
   }
 
   function populateFilterOptions(records) {
-    const districtSelect = document.getElementById("appliedDistrictSelect");
-    const areaSelect = document.getElementById("appliedAreaSelect");
-    const verticalSelect = document.getElementById("appliedVerticalSelect");
-    const genderSelect = document.getElementById("appliedGenderSelect");
-    const specialtySelect = document.getElementById("appliedSpecialtySelect");
-
     const districts = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.district)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
     const areas = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.area)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
     const genders = Array.from(new Set(records.map((r) => r.gender).filter(Boolean))).sort((a, b) => a.localeCompare(b));
     const specialties = SpecialtySettings.optionsFrom(records);
 
-    districtSelect.innerHTML = `<option value="">All</option>` + districts.map((d) => `<option value="${d}">${d}</option>`).join("");
-    areaSelect.innerHTML = `<option value="">All</option>` + areas.map((a) => `<option value="${a}">${a}</option>`).join("");
-    verticalSelect.innerHTML = `<option value="">All</option>` + DataStore.VERTICALS.map((v) => `<option value="${v.key}">${v.label}</option>`).join("");
-    genderSelect.innerHTML = `<option value="">All</option>` + genders.map((g) => `<option value="${g}">${g}</option>`).join("");
-    specialtySelect.innerHTML = `<option value="">All</option>` + specialties.map((s) => `<option value="${s}">${s}</option>`).join("");
+    appliedFilterOptions.district = districts.map((d) => ({ value: d, label: d }));
+    appliedFilterOptions.area = areas.map((a) => ({ value: a, label: a }));
+    appliedFilterOptions.vertical = DataStore.VERTICALS.map((v) => ({ value: v.key, label: v.label }));
+    appliedFilterOptions.gender = genders.map((g) => ({ value: g, label: g }));
+    appliedFilterOptions.specialty = specialties.map((s) => ({ value: s, label: s }));
+
+    // Drop any selected values that no longer exist in the freshly loaded
+    // data (e.g. after a Refresh), then reflect that in each trigger label.
+    if (appliedMs) {
+      ["district", "area", "vertical", "gender", "specialty"].forEach((key) => {
+        const valid = new Set(appliedFilterOptions[key].map((o) => o.value));
+        appliedFilters[key] = appliedFilters[key].filter((v) => valid.has(v));
+        appliedMs[key].updateLabel();
+      });
+    }
   }
 
   function wireFilterBar() {
@@ -399,6 +471,10 @@
       appliedFilters.customEnd = null;
       document.querySelectorAll("#appliedDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
       renderAppliedFiltered();
+      // Only matters if a Custom Range was active before this click — leaving
+      // it un-locks the Applied Over Time timeline back to the drag slider.
+      renderChart();
+      if (appliedTimelineSlider) appliedTimelineSlider.refresh();
     });
     DateRangePicker.attach(document.getElementById("appliedCustomRangeBtn"), {
       getInitial: () => ({ start: appliedFilters.customStart, end: appliedFilters.customEnd }),
@@ -410,6 +486,10 @@
         btn.textContent = `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
         document.querySelectorAll("#appliedDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
         renderAppliedFiltered();
+        // Custom Range now drives the Applied Over Time chart/timeline too —
+        // see isCustomRangeActive()/renderChart().
+        renderChart();
+        if (appliedTimelineSlider) appliedTimelineSlider.refresh();
       },
       onClear: () => {
         appliedFilters.preset = "all";
@@ -419,33 +499,57 @@
         btn.textContent = "Custom Range";
         document.querySelectorAll("#appliedDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
         renderAppliedFiltered();
+        renderChart();
+        if (appliedTimelineSlider) appliedTimelineSlider.refresh();
       },
     });
-    document.getElementById("appliedDistrictSelect").addEventListener("change", (e) => {
-      appliedFilters.district = e.target.value;
-      renderAppliedFiltered();
-      renderChart();
-    });
-    document.getElementById("appliedAreaSelect").addEventListener("change", (e) => {
-      appliedFilters.area = e.target.value;
-      renderAppliedFiltered();
-      renderChart();
-    });
-    document.getElementById("appliedVerticalSelect").addEventListener("change", (e) => {
-      appliedFilters.vertical = e.target.value;
-      renderAppliedFiltered();
-      renderChart();
-    });
-    document.getElementById("appliedGenderSelect").addEventListener("change", (e) => {
-      appliedFilters.gender = e.target.value;
-      renderAppliedFiltered();
-      renderChart();
-    });
-    document.getElementById("appliedSpecialtySelect").addEventListener("change", (e) => {
-      appliedFilters.specialty = e.target.value;
-      renderAppliedFiltered();
-      renderChart();
-    });
+    appliedMs = {
+      district: MultiSelect.attach(document.getElementById("appliedDistrictMs"), {
+        getOptions: () => appliedFilterOptions.district,
+        getSelected: () => appliedFilters.district,
+        onApply: (values) => {
+          appliedFilters.district = values;
+          renderAppliedFiltered();
+          renderChart();
+        },
+      }),
+      area: MultiSelect.attach(document.getElementById("appliedAreaMs"), {
+        getOptions: () => appliedFilterOptions.area,
+        getSelected: () => appliedFilters.area,
+        onApply: (values) => {
+          appliedFilters.area = values;
+          renderAppliedFiltered();
+          renderChart();
+        },
+      }),
+      vertical: MultiSelect.attach(document.getElementById("appliedVerticalMs"), {
+        getOptions: () => appliedFilterOptions.vertical,
+        getSelected: () => appliedFilters.vertical,
+        onApply: (values) => {
+          appliedFilters.vertical = values;
+          renderAppliedFiltered();
+          renderChart();
+        },
+      }),
+      gender: MultiSelect.attach(document.getElementById("appliedGenderMs"), {
+        getOptions: () => appliedFilterOptions.gender,
+        getSelected: () => appliedFilters.gender,
+        onApply: (values) => {
+          appliedFilters.gender = values;
+          renderAppliedFiltered();
+          renderChart();
+        },
+      }),
+      specialty: MultiSelect.attach(document.getElementById("appliedSpecialtyMs"), {
+        getOptions: () => appliedFilterOptions.specialty,
+        getSelected: () => appliedFilters.specialty,
+        onApply: (values) => {
+          appliedFilters.specialty = values;
+          renderAppliedFiltered();
+          renderChart();
+        },
+      }),
+    };
     document.getElementById("appliedMinYearsInput").addEventListener("input", (e) => {
       appliedFilters.minYears = e.target.value === "" ? "" : e.target.value;
       renderAppliedFiltered();
@@ -463,11 +567,11 @@
     });
     document.getElementById("appliedClearFiltersBtn").addEventListener("click", () => {
       appliedFilters.preset = "all";
-      appliedFilters.district = "";
-      appliedFilters.area = "";
-      appliedFilters.vertical = "";
-      appliedFilters.gender = "";
-      appliedFilters.specialty = "";
+      appliedFilters.district = [];
+      appliedFilters.area = [];
+      appliedFilters.vertical = [];
+      appliedFilters.gender = [];
+      appliedFilters.specialty = [];
       appliedFilters.minYears = "";
       appliedFilters.minAge = "";
       appliedFilters.maxAge = "";
@@ -475,16 +579,13 @@
       appliedFilters.customEnd = null;
       document.getElementById("appliedCustomRangeBtn").textContent = "Custom Range";
       document.querySelectorAll("#appliedDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
-      document.getElementById("appliedDistrictSelect").value = "";
-      document.getElementById("appliedAreaSelect").value = "";
-      document.getElementById("appliedVerticalSelect").value = "";
-      document.getElementById("appliedGenderSelect").value = "";
-      document.getElementById("appliedSpecialtySelect").value = "";
+      Object.values(appliedMs).forEach((ms) => ms.updateLabel());
       document.getElementById("appliedMinYearsInput").value = "";
       document.getElementById("appliedMinAgeInput").value = "";
       document.getElementById("appliedMaxAgeInput").value = "";
       renderAppliedFiltered();
       renderChart();
+      if (appliedTimelineSlider) appliedTimelineSlider.refresh();
     });
   }
 
@@ -504,6 +605,7 @@
   function renderAppliedAll() {
     renderKpiRow();
     renderVerticalGridPanel(); // unfiltered — all-time applications per vertical
+    if (appliedTimelineSlider) appliedTimelineSlider.refresh(); // pick up the freshly-loaded data's earliest submittedAt
     renderChart();
     renderAppliedInsights(); // unfiltered — real, all-time numbers
     renderAppliedFiltered();
@@ -565,9 +667,13 @@
     return { current, previous, deltaPct, direction };
   }
 
-  function appliedTimeSeries(records, count) {
+  // `endAnchor` (new) lets the window end anywhere, not just today — see
+  // shared/timelineSlider.js and shared/dataStore.js's timeSeries() for
+  // the same extension applied to the Calls page. Defaults to `new Date()`
+  // so the one pre-existing call below (with no 3rd argument) is unchanged.
+  function appliedTimeSeries(records, count, endAnchor) {
     const { startOfDay, addDays } = DataStore._dateHelpers;
-    const now = new Date();
+    const now = endAnchor || new Date();
     const n = count || 30;
     const buckets = [];
     for (let i = n - 1; i >= 0; i--) {
@@ -674,11 +780,18 @@
 
   function renderChart() {
     const records = getFilteredAppliedForChart();
-    const series = appliedTimeSeries(records, 30);
+    let series;
+    if (isCustomRangeActive()) {
+      const { startOfDay } = DataStore._dateHelpers;
+      const dayCount = Math.round((startOfDay(appliedFilters.customEnd) - startOfDay(appliedFilters.customStart)) / 86400000) + 1;
+      series = appliedTimeSeries(records, dayCount, appliedFilters.customEnd);
+    } else {
+      series = appliedTimeSeries(records, 30, appliedChartEndAnchor);
+    }
     const total = series.reduce((s, p) => s + p.count, 0);
     const avg = series.length ? Math.round((total / series.length) * 10) / 10 : 0;
     document.getElementById("appliedChartTotal").textContent = total.toLocaleString();
-    document.getElementById("appliedChartAvg").textContent = `${avg}/day avg over 30 days`;
+    document.getElementById("appliedChartAvg").textContent = `${avg}/day avg over ${series.length} day${series.length === 1 ? "" : "s"}`;
     Chart.render(document.getElementById("appliedChart"), series, { tone: "good" });
   }
 

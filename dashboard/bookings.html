@@ -115,7 +115,11 @@
           <h2>Bookings by Vertical</h2>
           <span class="ov-hint">Top number: booked sessions (filtered) · bottom: avg session value (all-time)</span>
         </div>
-        <div class="ov-vertical-grid side-vertical-grid" id="bkVerticalGrid"></div>
+        <div class="leads-filter-presets bk-avg-toggle" id="bkAvgToggle">
+          <button type="button" data-mode="total" class="active">Average Total</button>
+          <button type="button" data-mode="perHour">Average per Hour</button>
+        </div>
+        <div class="ov-vertical-grid side-vertical-grid bk-vertical-grid" id="bkVerticalGrid"></div>
       </section>
 
       <section class="ov-card">
@@ -198,6 +202,15 @@
   }
   function hasPrice(b) { return b.price !== "" && b.price != null && !isNaN(Number(b.price)); }
   function priceNum(b) { return hasPrice(b) ? Number(b.price) : 0; }
+  // Duration is stored as free text like "1 Hour"/"1.5 Hours" — see
+  // recomputeDuration() below (nearest-quarter-hour, auto-filled from the
+  // Start/End Time fields when a booking is edited). This just reads the
+  // leading number back out for the "Average per Hour" toggle above the
+  // vertical grid.
+  function durationHours(b) {
+    const m = String(b.duration || "").match(/\d+(\.\d+)?/);
+    return m ? Number(m[0]) : null;
+  }
   function hasRating(b) { return b.rating !== "" && b.rating != null && !isNaN(Number(b.rating)); }
   function statusKey(b) {
     const s = String(b.status || "Scheduled").trim().toLowerCase();
@@ -238,6 +251,7 @@
     });
 
     wireFilterBar();
+    wireAvgToggle();
     loadBookingsData();
   }
 
@@ -433,13 +447,40 @@
 
   /* ---------------- right sidebar: per-vertical grid ---------------- */
 
+  // "Average Total" (default) vs. "Average per Hour" — toggled above the
+  // grid via #bkAvgToggle/wireAvgToggle(). Per-hour divides each priced
+  // booking's price by its own duration first, then averages those hourly
+  // rates (rather than summing all prices over summed hours), so one very
+  // long or very short session doesn't skew the vertical's typical rate.
+  let bkAvgMode = "total";
+
+  function wireAvgToggle() {
+    document.getElementById("bkAvgToggle").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-mode]");
+      if (!btn) return;
+      bkAvgMode = btn.dataset.mode;
+      document.querySelectorAll("#bkAvgToggle button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderVerticalGrid();
+    });
+  }
+
   function renderVerticalGrid() {
     const filtered = getFilteredBookings();
     const grid = document.getElementById("bkVerticalGrid");
     grid.innerHTML = DataStore.VERTICALS.map((v) => {
       const bookedCount = filtered.filter((b) => b.vertical === v.key).length;
       const allForVertical = bkBookings.filter((b) => b.vertical === v.key && hasPrice(b));
-      const avgValue = allForVertical.length ? allForVertical.reduce((s, b) => s + priceNum(b), 0) / allForVertical.length : null;
+
+      let avgValue = null;
+      let avgSuffix = "";
+      if (bkAvgMode === "perHour") {
+        const withHours = allForVertical.filter((b) => durationHours(b));
+        avgValue = withHours.length ? withHours.reduce((s, b) => s + priceNum(b) / durationHours(b), 0) / withHours.length : null;
+        avgSuffix = "/hr";
+      } else {
+        avgValue = allForVertical.length ? allForVertical.reduce((s, b) => s + priceNum(b), 0) / allForVertical.length : null;
+      }
+
       return `
       <div class="ov-vertical-box" title="${v.label}">
         <div class="ov-vertical-box-head">
@@ -448,7 +489,7 @@
         </div>
         <div class="ov-vertical-box-count">${bookedCount}</div>
         <div class="ov-vertical-box-count-label">booked</div>
-        <div class="bk-vbox-secondary">avg <strong>${avgValue !== null ? formatMoney(avgValue) : "—"}</strong></div>
+        <div class="bk-vbox-secondary">avg <strong>${avgValue !== null ? formatMoney(avgValue) + avgSuffix : "—"}</strong></div>
       </div>`;
     }).join("");
   }

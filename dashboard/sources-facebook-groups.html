@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Sources — Facebook Groups — Sources</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Facebook Groups — Sources</h1>
+      <p class="page-subheading">Every Facebook Group tracked as a Servi source — reach, admin contact, outreach status and which vertical each group serves best.</p>
+    </div>
+  </div>
+
+  <div class="src-notice src-notice-compact">
+    <span class="src-notice-icon" id="srcNoticeIcon"></span>
+    <span><strong>Snapshot, not live yet.</strong> Computed from the Facebook Groups sheet as of Sep 17, 2026 — read-only, same as Leads and Applied.</span>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2>At a glance</h2>
+      <span class="ov-hint">Across every Facebook Groups source tracked</span>
+    </div>
+    <div class="ov-kpi-row cols-5" id="srcKpiRow"></div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Coverage by vertical</h2>
+          <span class="ov-hint">How this source type covers each of the 9 verticals</span>
+        </div>
+        <div class="src-vbox-grid" id="srcVboxGrid"></div>
+      </section>
+
+      <section class="ov-card leads-filter-card">
+        <div class="ov-card-header">
+          <h2>Filter &amp; sort</h2>
+          <span class="ov-hint">Applies to the list below</span>
+        </div>
+        <div class="leads-filter-bar">
+          <div class="leads-filter-selects">
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Vertical</span>
+              <button type="button" id="srcVerticalMs"></button>
+            </div>
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Contacted</span>
+              <button type="button" id="srcContactedMs"></button>
+            </div>
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Sort by</span>
+              <select id="srcSortSelect">
+                <option value="followersDesc">Followers (high to low)</option>
+                <option value="nameAsc">Name (A–Z)</option>
+                <option value="contactedFirst">Contacted first</option>
+                <option value="notContactedFirst">Not contacted first</option>
+              </select>
+            </div>
+            <button type="button" class="leads-clear-btn" id="srcClearFiltersBtn">Clear filters</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="ov-card leads-table-card">
+        <div class="ov-card-header">
+          <h2>All Facebook Groups</h2>
+          <span class="ov-hint" id="srcTableHint"></span>
+        </div>
+        <div class="leads-table-toolbar">
+          <label class="leads-search-wrap">
+            <span id="srcSearchIcon"></span>
+            <input type="text" id="srcTableSearch" placeholder="Search name, admin, phone…" />
+          </label>
+        </div>
+        <div class="leads-table-scroll">
+          <table class="leads-table" id="srcTable">
+            <thead>
+              <tr>
+                <th data-sort="name">Name</th>
+                <th>Vertical(s)</th>
+                <th class="src-followers-col" data-sort="followers">Followers</th>
+                <th>Admin / Contact</th>
+                <th>Phone</th>
+                <th data-sort="contacted">Contacted</th>
+                <th>Notes / Link</th>
+              </tr>
+            </thead>
+            <tbody id="srcTableBody"></tbody>
+          </table>
+        </div>
+        <div class="leads-table-pagination" id="srcTablePagination"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Facebook Groups by vertical</h2>
+          <span class="ov-hint">Visual breakdown of where these sources come from</span>
+        </div>
+        <div class="chart-wrap" id="srcChart"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="srcInsights"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/multiSelect.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sourcesData.js"></script>
+<script src="../shared/chart.js"></script>
+<script src="../shared/sourceTypePage.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     FACEBOOK_GROUPS_ENTITIES — snapshot dataset, not invented
+     ------------------------------------------------------------
+     Every row below was extracted from the real Excel export of the
+     Facebook Groups source list (48 rows). Same "snapshot, not
+     live yet" status as every other Sources page — once this list is
+     a connected live Google Sheet, this constant gets replaced by a
+     SheetsClient fetch the same way fetchAll()/fetchApplied() work.
+     Field shape: { name, verticals[], link, followers, contacted
+     (true/false/null — null/blank means "unknown", NOT "no"),
+     adminName, phone, email, status, area, notes }.
+     ============================================================ */
+  const FACEBOOK_GROUPS_ENTITIES = [{"name": "Babysitter Lebanon🇱🇧 بيبي ستر", "verticals": ["Baby Sitters and Nannies"], "link": "Babysitter Lebanon 🇱🇧", "followers": 1400.0, "contacted": true, "adminName": "Mariam Hamoud", "phone": "", "email": "", "status": "FUP", "area": "Private", "notes": "Private group, likely active, 17 posts last month.", "posted": false}, {"name": "Beirut Business Network", "verticals": ["Pet Services", "Sport Coaches and Trainers"], "link": "Beirut Business Network", "followers": 1400.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "A broad, poorly moderated group promotes several random Lebanese businesses.", "posted": false}, {"name": "Nurses in Lebanon", "verticals": ["Nurses"], "link": "Nurses in Lebanon", "followers": 2000.0, "contacted": true, "adminName": "Aya Agia Doha Km Elyas Wehbi", "phone": "", "email": "", "status": "Approved", "area": "Public", "notes": "Nursing group sharing nursing-related information, resources, and job opportunities.", "posted": false}, {"name": "Beirut Tutors", "verticals": ["Tutors"], "link": "Beirut Tutors | Facebook", "followers": 2200.0, "contacted": true, "adminName": "Marc Awad Fayez Yah Bucker Yahfoufi", "phone": "76/ 531 433", "email": "beirut.tutor@gmail.com", "status": "FUP", "area": "Public", "notes": "American University Tutors: professional tutoring focused on AUB and LAU coursework.", "posted": false}, {"name": "English teachers of Lebanon", "verticals": ["Tutors"], "link": "https://www.facebook.com/groups/1598116290439736/about", "followers": 2400.0, "contacted": true, "adminName": "Khalil Zahra", "phone": "", "email": "", "status": "FUP", "area": "Public", "notes": "A group for Lebanese English Teachers, where they post job opportunities and teachers' professional bios.", "posted": false}, {"name": "Order of Nurses in Lebanon تنظيم الممرضين في لبنان", "verticals": ["Nurses"], "link": "Order of Nurses in Lebanon", "followers": 3100.0, "contacted": true, "adminName": "Mohammad Jammal", "phone": "", "email": "", "status": "FUP", "area": "Private", "notes": "Private Group, somewhat active.", "posted": false}, {"name": "Lebanon Ladies by Rodina (4.1K)", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1EE21DNwPj/?mibextid=wwXIfr", "followers": 4200.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Unmoderated group, buying and selling clothes, random advertisement posts.", "posted": false}, {"name": "Teachers of Lebanon - let's get connected here!", "verticals": ["Tutors"], "link": "https://www.facebook.com/share/g/1D1GLSbuAG/?mibextid=wwXIfr", "followers": 5000.0, "contacted": null, "adminName": "Muhammad Asif Tima Baghdadi", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Unmoderated group.Contains random posts.", "posted": false}, {"name": "Beautiful girls in Lebanon", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1HeEhqVuB8/?mibextid=wwXIfr", "followers": 5700.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Unmoderated group, Caregiving services promoted (Medi to Home), irrelevant.", "posted": false}, {"name": "Parents of children with challenges...Different not less", "verticals": ["Caregivers", "Baby Sitters and Nannies"], "link": "https://www.facebook.com/share/g/173tEKf4VM/?mibextid=wwXIfr", "followers": 5700.0, "contacted": true, "adminName": "Rasha Ayash Rana Chehab Najah-Rita Atallah", "phone": "", "email": "", "status": "FUP", "area": "Private", "notes": "Private group, likely relevant.", "posted": false}, {"name": "Babysitter And Nannies In Lebanon", "verticals": ["Baby Sitters and Nannies"], "link": "Babysitter And Nannies In Lebanon | Facebook", "followers": 6800.0, "contacted": null, "adminName": "Deema Itani", "phone": "", "email": "", "status": "", "area": "Public", "notes": "A Facebook group connecting Lebanese families with babysitters, nannies, and caregivers — families can post their needs directly, and nannies/caregivers can reach out with their details to find work.", "posted": false}, {"name": "Teachers of Lebanon (17K)", "verticals": ["Tutors"], "link": "https://www.facebook.com/share/g/1EjruQyh4H/?mibextid=wwXIfr", "followers": 17200.0, "contacted": null, "adminName": "Samer Sd", "phone": "", "email": "", "status": "", "area": "Public", "notes": "A group of teachers across Lebanon to share jobs, resources, and opportunities.", "posted": false}, {"name": "Lebanese Beauticians", "verticals": ["Beauty Services"], "link": "Lebanese Beauticians", "followers": 299.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "A Facebook group for Lebanese beauticians to find jobs, hire staff, access company offers, stay current on new techniques, and learn about beauty events.", "posted": false}, {"name": "Lebanese Nurses", "verticals": ["Nurses"], "link": "Lebanese Nurses | Facebook", "followers": 3800.0, "contacted": null, "adminName": "Abdallah M Mikati", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Job opportunities for nurses mostly in Saudi Arabia", "posted": false}, {"name": "المعلمون في لبنان", "verticals": ["Tutors"], "link": "المعلمون في لبنان", "followers": 63100.0, "contacted": null, "adminName": "Hasan Trad", "phone": "", "email": "", "status": "", "area": "Private", "notes": "Private Group for teachers in Lebanon, for educational and academic affairs.", "posted": false}, {"name": "Teachers of Lebanon", "verticals": ["Tutors"], "link": "Teachers of Lebanon | Facebook", "followers": 64000.0, "contacted": true, "adminName": "Chadi E. El Chami Hady Skayem", "phone": "", "email": "", "status": "Declined", "area": "Public", "notes": "The Teachers of Lebanon Facebook group welcomes teachers to share classroom experience, training tips, and ideas", "posted": false}, {"name": "Mums in maten", "verticals": ["Baby Sitters and Nannies"], "link": "https://www.facebook.com/share/g/1CPyYxDmZA/?mibextid=wwXIfr", "followers": 922.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Unmoderated, completely random posts.", "posted": false}, {"name": "pets in lebanon", "verticals": ["Pet Services"], "link": "pets in lebanon", "followers": 958.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Pet rescue and adoption community.", "posted": false}, {"name": "Give MeFive - Mom & Kids Shopping", "verticals": ["General / Other"], "link": "Give Me Five", "followers": 1800.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Buying and selling used or new items for mothers and children.", "posted": false}, {"name": "La Leche League Lebanon, Middle East", "verticals": ["Baby Sitters and Nannies"], "link": "https://www.facebook.com/share/g/1BrHPXtkun/?mibextid=wwXIfr", "followers": 2000.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Mothers' Breastfeeding Group, meetups, and breastfeeding advice.", "posted": false}, {"name": "Mommies in Lebanon", "verticals": ["General / Other"], "link": "Mommies in Lebanon", "followers": 2200.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Clothing Product Posts. Irrelevant.", "posted": false}, {"name": "LAYAL Kids", "verticals": ["Baby Sitters and Nannies"], "link": "https://www.facebook.com/share/g/18aHmwtBF2/?mibextid=wwXIfr", "followers": 2200.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Buying and selling LC Waikiki used children's clothing.", "posted": false}, {"name": "Animals of Lebanon", "verticals": ["Pet Services"], "link": "Animals of Lebanon", "followers": 2800.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Pet rescue and adoption community.", "posted": false}, {"name": "Moms around Beirut", "verticals": ["General / Other"], "link": "Moms around Beirut", "followers": 3600.0, "contacted": true, "adminName": "Angela Bonifacio Reine Tohme Barbara Tomassini", "phone": "", "email": "", "status": "FUP", "area": "Private", "notes": "Private Group. Active. No advertisements allowed.", "posted": false}, {"name": "Rahbani Music Group", "verticals": ["Music and Art Instructors"], "link": "Rahbani Music Group | Beirut", "followers": 4100.0, "contacted": null, "adminName": "", "phone": "03 694 901", "email": "rmg.institute@gmail.com", "status": "", "area": "Public", "notes": "A music institute offering music education classes for both beginners and advanced students. Recently inactive, admin only.", "posted": false}, {"name": "Moms in Lebanon (Middle East)", "verticals": ["General / Other"], "link": "Moms in Lebanon (Middle East)", "followers": 4200.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Buying and selling used or new items for mothers and children.", "posted": false}, {"name": "Events for kids all over Lebanon", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/19AHjnRann/?mibextid=wwXIfr", "followers": 4600.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Posts for kids' and family friendly events.", "posted": false}, {"name": "Paws Crossed Lebanon", "verticals": ["Pet Services"], "link": "Paws Crossed Lebanon", "followers": 7400.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "NGO, Pet rescue and adoption community.", "posted": false}, {"name": "Pinky and Powerful Moms", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1C3TnY4Nij/?mibextid=wwXIfr", "followers": 7500.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Private Group. No advertisements allowed.", "posted": false}, {"name": "Buy & Sell Babies and Kids Stuff in Lebanon", "verticals": ["Baby Sitters and Nannies"], "link": "https://www.facebook.com/share/g/1HGWVPuai1/?mibextid=wwXIfr", "followers": 13300.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Private", "notes": "Private Group. No Promotions allowed.", "posted": false}, {"name": "mommy's classifieds lebanon, saida", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1DJkkdj6kk/?mibextid=wwXIfr", "followers": 13500.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Private", "notes": "Private Group. No advertisements allowed.", "posted": false}, {"name": "Events in Lebanon", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1EhimMQBHU/?mibextid=wwXIfr", "followers": 13600.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Hiking and sports-related events and activities.", "posted": false}, {"name": "Lebanese Ladies VIP", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1ZpLqjcb1d/?mibextid=wwXIfr", "followers": 15700.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Private", "notes": "Private Group, Females only, Business posts from Monday till Thursday.", "posted": false}, {"name": "Help Animal In Lebanon", "verticals": ["Pet Services"], "link": "Help Animal In Lebanon", "followers": 16200.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Pet rescue and adoption community.", "posted": false}, {"name": "Dogs Rescue Lebanon (&ADOPTION)", "verticals": ["Pet Services"], "link": "Dogs Rescue Lebanon (&ADOPTION)", "followers": 17900.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Pet rescue and adoption community.", "posted": false}, {"name": "Kids' Zone", "verticals": ["Baby Sitters and Nannies"], "link": "https://www.facebook.com/share/g/1BqpGRdUvZ/?mibextid=wwXIfr", "followers": 28900.0, "contacted": null, "adminName": "Nour Haidar Zeinab Kashani Mokdad Nadine Zaiter", "phone": "", "email": "", "status": "", "area": "Public", "notes": "Private Group. No Promotions allowed.", "posted": false}, {"name": "Lebanese Girls by Joanna", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/162Y8U7an25/?mibextid=wwXIfr", "followers": 41100.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Private", "notes": "Private Group, Female Community.", "posted": false}, {"name": "Mommy Classifieds, Beirut, Lebanon", "verticals": ["Baby Sitters and Nannies", "Caregivers"], "link": "https://www.facebook.com/share/g/18wwGzNmnK/?mibextid=wwXIfr", "followers": 57900.0, "contacted": true, "adminName": "Amani Hamze Vanessa Nassif Rima Mikati", "phone": "", "email": "", "status": "FUP", "area": "Private", "notes": "Private Group. Buying and selling new and used items for mothers and children.", "posted": false}, {"name": "Pet To Adopt Lebanon", "verticals": ["Pet Services"], "link": "Pet To Adopt Lebanon", "followers": 59400.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "A pet adoption platform that matches dogs with the right families, with an experienced team and an up-to-date listing site .", "posted": false}, {"name": "Lebanese Ladies By Niveen", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1GcvcEUh3m/?mibextid=wwXIfr", "followers": 69300.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Private", "notes": "Private Group, Females Only.", "posted": false}, {"name": "Lebanese ladies by Dano", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1EhqXpKDoq/?mibextid=wwXIfr", "followers": 96000.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Private", "notes": "Private Group, Females Only.", "posted": false}, {"name": "Lebanon Ladies by Rodina (117.5K)", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1Hae3Bq6he/?mibextid=wwXIfr", "followers": 117700.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Private", "notes": "Private Group, Females Only.", "posted": false}, {"name": "Mamas Corner", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/1BmZYAHMi1/?mibextid=wwXIfr", "followers": 2600.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Private", "notes": "", "posted": false}, {"name": "Mama 2 Mama Beirut Breastfeeding Support", "verticals": ["General / Other"], "link": "https://www.facebook.com/share/g/1Bbav37tRL/?mibextid=wwXIfr", "followers": 26500.0, "contacted": true, "adminName": "Abbas Haj Ali", "phone": "", "email": "", "status": "FUP", "area": "Private", "notes": "Private group; no advertisements allowed.", "posted": false}, {"name": "Home nursing in Lebanon", "verticals": ["Nurses"], "link": "https://www.facebook.com/groups/551818248212273/", "followers": 535.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "", "posted": false}, {"name": "لجنة الاساتذة المتعاقدين", "verticals": ["Tutors"], "link": "https://www.facebook.com/groups/329387053746217/files/files", "followers": 6000.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "", "posted": false}, {"name": "Home nursing in Lebanon", "verticals": ["Nurses", "General / Other"], "link": "https://www.facebook.com/groups/551818248212273", "followers": 530.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "", "posted": false}, {"name": "رابطة الأساتذة المتعاقدين في التعليم الأساسي الرسمي في لبنان", "verticals": ["Tutors"], "link": "https://www.facebook.com/ctlpteacher/?locale=ar_AR", "followers": 21000.0, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "Public", "notes": "", "posted": false}];
+
+  SourceTypePage.init({
+    entities: FACEBOOK_GROUPS_ENTITIES,
+    sourceType: "Facebook Groups",
+    icon: "facebook",
+    hasReach: true,
+    sortDefault: "followersDesc",
+    kpi3: {
+      label: "Approved",
+      icon: "check",
+      substitute: false,
+      tooltip: "Real tracked status \u2014 Facebook Groups that have explicitly agreed to work with Servi.",
+      compute: (rows) => rows.filter((e) => e.status === "Approved").length,
+    },
+    kpi4: {
+      label: "Posted",
+      icon: "check",
+      substitute: false,
+      tooltip: "Real tracked field \u2014 whether Servi's flier/ad has actually been posted to that group's page yet. None have been posted so far.",
+      compute: (rows) => rows.filter((e) => e.posted === true).length,
+    },
+    vboxExtra: {
+      label: "Total Reach",
+      compute: (list) => list.reduce((s, e) => s + (e.followers || 0), 0),
+    },
+  });
+
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    AppShell.init({ current: "sources-facebook-groups", root: ".." });
+  }
+</script>
+
+</body>
+</html>

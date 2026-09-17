@@ -28,10 +28,7 @@
   </div>
 
   <section class="ov-card ov-leads-overview">
-    <div class="ov-kpi-row cols-4" id="leadsKpiRow">
-      <div class="ov-skeleton" style="height:110px;"></div>
-      <div class="ov-skeleton" style="height:110px;"></div>
-      <div class="ov-skeleton" style="height:110px;"></div>
+    <div class="ov-kpi-row cols-1" id="leadsKpiRow">
       <div class="ov-skeleton" style="height:110px;"></div>
     </div>
   </section>
@@ -42,35 +39,23 @@
       <span class="ov-hint">Applies to the table below — never the vertical totals above</span>
     </div>
     <div class="leads-filter-bar">
-      <div class="leads-filter-presets" id="leadsDatePresets">
-        <button type="button" data-preset="all" class="active" data-i18n="All Time">All Time</button>
-        <button type="button" data-preset="yesterday" data-i18n="Yesterday">Yesterday</button>
-        <button type="button" data-preset="today" data-i18n="Today">Today</button>
-        <button type="button" data-preset="week" data-i18n="This Week">This Week</button>
-        <button type="button" data-preset="month" data-i18n="This Month">This Month</button>
-        <button type="button" data-preset="custom" id="leadsCustomRangeBtn" class="drp-trigger-btn" data-i18n="Custom Range">Custom Range</button>
-      </div>
       <div class="leads-filter-selects">
-        <label class="leads-select-wrap">
+        <div class="leads-select-wrap">
           <span class="leads-select-label" data-i18n="District">District</span>
-          <select id="leadsDistrictSelect"><option value="">All</option></select>
-        </label>
-        <label class="leads-select-wrap">
+          <button type="button" id="leadsDistrictMs"></button>
+        </div>
+        <div class="leads-select-wrap">
           <span class="leads-select-label" data-i18n="Area">Area</span>
-          <select id="leadsAreaSelect"><option value="">All</option></select>
-        </label>
-        <label class="leads-select-wrap">
+          <button type="button" id="leadsAreaMs"></button>
+        </div>
+        <div class="leads-select-wrap">
           <span class="leads-select-label" data-i18n="Vertical">Vertical</span>
-          <select id="leadsVerticalSelect"><option value="">All</option></select>
-        </label>
-        <label class="leads-select-wrap">
-          <span class="leads-select-label" data-i18n="Gender">Gender</span>
-          <select id="leadsGenderSelect"><option value="">All</option></select>
-        </label>
-        <label class="leads-select-wrap">
+          <button type="button" id="leadsVerticalMs"></button>
+        </div>
+        <div class="leads-select-wrap">
           <span class="leads-select-label" data-i18n="Added By">Added By</span>
-          <select id="leadsAddedBySelect"><option value="">All</option></select>
-        </label>
+          <button type="button" id="leadsAddedByMs"></button>
+        </div>
         <button type="button" class="leads-clear-btn" id="leadsClearFiltersBtn" data-i18n="Clear filters">Clear filters</button>
       </div>
     </div>
@@ -142,7 +127,6 @@
 <script src="../shared/notifications.js"></script>
 <script src="../shared/calendar.js"></script>
 <script src="../shared/taskSheet.js"></script>
-<script src="../shared/dateRangePicker.js"></script>
 <script src="../shared/sheetsConfig.js"></script>
 <script src="../shared/sheetsClient.js"></script>
 <script src="../shared/statusSettings.js"></script>
@@ -150,6 +134,7 @@
 <script src="../shared/dataStore.js"></script>
 <script src="../shared/verticalTargets.js"></script>
 <script src="../shared/areaSettings.js"></script>
+<script src="../shared/multiSelect.js"></script>
 <script src="../shared/team.js"></script>
 <script src="../shared/i18n.js"></script>
 <script src="../shared/sidebar.js"></script>
@@ -243,36 +228,31 @@
      "total verticals isn't affected by the filter" requirement.
      ============================================================ */
 
-  const leadsFilters = { preset: "all", district: "", area: "", vertical: "", gender: "", addedBy: "", customStart: null, customEnd: null };
+  // No date-based preset here on purpose — the sheet only has a "Date
+  // Contacted" field, not a real "date added," so a Today/This Week/This
+  // Month filter here would silently mean "contacted in that period," not
+  // "added in that period." That real, correctly-labeled filter already
+  // lives on the Calls page (calls.html), which is what Date Contacted
+  // actually describes. The Date Contacted value itself is still shown as
+  // a column in the table below — just not used as a filter here.
+  // Every filter below is multi-select (an array of chosen values) — an
+  // empty array means "no restriction," same as the old "" single-select
+  // sentinel did. Gender was removed from this page entirely per feedback.
+  const leadsFilters = { district: [], area: [], vertical: [], addedBy: [] };
 
-  function datePresetRange(preset) {
-    const { startOfDay, startOfWeek, startOfMonth, addDays, addMonths } = DataStore._dateHelpers;
-    const now = new Date();
-    if (preset === "today") return { start: startOfDay(now), end: addDays(startOfDay(now), 1) };
-    if (preset === "yesterday") {
-      const y = addDays(startOfDay(now), -1);
-      return { start: y, end: addDays(y, 1) };
-    }
-    if (preset === "week") return { start: startOfWeek(now), end: addDays(startOfWeek(now), 7) };
-    if (preset === "month") return { start: startOfMonth(now), end: addMonths(startOfMonth(now), 1) };
-    // "from x to y" — end is exclusive elsewhere in this function, so the
-    // picked end day itself is still included by advancing one extra day.
-    if (preset === "custom" && leadsFilters.customStart && leadsFilters.customEnd) {
-      return { start: leadsFilters.customStart, end: addDays(leadsFilters.customEnd, 1) };
-    }
-    return { start: null, end: null };
-  }
+  // Populated by populateFilterOptions() below and read live by each
+  // MultiSelect's getOptions() callback, so re-loading data (Refresh)
+  // updates the available choices without re-attaching the widgets.
+  const leadsFilterOptions = { district: [], area: [], vertical: [], addedBy: [] };
+  let leadsMs = null; // { district, area, vertical, addedBy } MultiSelect instances, set once in wireFilterBar()
 
   function getFilteredLeadsRecords() {
     const all = DataStore.getAllRecords();
-    const { start, end } = datePresetRange(leadsFilters.preset);
     return all.filter((r) => {
-      if (start && (!r.dateContacted || r.dateContacted < start || r.dateContacted >= end)) return false;
-      if (leadsFilters.district && AreaSettings.canonicalize(r.district) !== leadsFilters.district) return false;
-      if (leadsFilters.area && AreaSettings.canonicalize(r.area) !== leadsFilters.area) return false;
-      if (leadsFilters.vertical && !DataStore.verticalsOf(r).includes(leadsFilters.vertical)) return false;
-      if (leadsFilters.gender && r.gender !== leadsFilters.gender) return false;
-      if (leadsFilters.addedBy && r.addedBy !== leadsFilters.addedBy) return false;
+      if (leadsFilters.district.length && !leadsFilters.district.includes(AreaSettings.canonicalize(r.district))) return false;
+      if (leadsFilters.area.length && !leadsFilters.area.includes(AreaSettings.canonicalize(r.area))) return false;
+      if (leadsFilters.vertical.length && !DataStore.verticalsOf(r).some((v) => leadsFilters.vertical.includes(v))) return false;
+      if (leadsFilters.addedBy.length && !leadsFilters.addedBy.includes(r.addedBy)) return false;
       return true;
     });
   }
@@ -282,93 +262,68 @@
   // why (spelling variants like "Bourj hammoud"/"Borj hammoud"/"Bourj
   // hammoud Beirut" all collapse to one "Bourj Hammoud" entry here).
   function populateFilterOptions(records) {
-    const districtSelect = document.getElementById("leadsDistrictSelect");
-    const areaSelect = document.getElementById("leadsAreaSelect");
-    const verticalSelect = document.getElementById("leadsVerticalSelect");
-    const genderSelect = document.getElementById("leadsGenderSelect");
-    const addedBySelect = document.getElementById("leadsAddedBySelect");
-
     const districts = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.district)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
     const areas = Array.from(new Set(records.map((r) => AreaSettings.canonicalize(r.area)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
-    const genders = Array.from(new Set(records.map((r) => r.gender).filter(Boolean))).sort((a, b) => a.localeCompare(b));
     const addedByNames = Array.from(new Set(records.map((r) => r.addedBy).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
-    districtSelect.innerHTML = `<option value="">All</option>` + districts.map((d) => `<option value="${d}">${d}</option>`).join("");
-    areaSelect.innerHTML = `<option value="">All</option>` + areas.map((a) => `<option value="${a}">${a}</option>`).join("");
-    verticalSelect.innerHTML = `<option value="">All</option>` + DataStore.VERTICALS.map((v) => `<option value="${v.key}">${v.label}</option>`).join("");
-    // No fallback "Male"/"Female" options if the sheet has none — never
-    // invent choices that aren't actually present in the real data.
-    genderSelect.innerHTML = `<option value="">All</option>` + genders.map((g) => `<option value="${g}">${g}</option>`).join("");
-    addedBySelect.innerHTML = `<option value="">All</option>` + addedByNames.map((n) => `<option value="${n}">${n}</option>`).join("");
+    leadsFilterOptions.district = districts.map((d) => ({ value: d, label: d }));
+    leadsFilterOptions.area = areas.map((a) => ({ value: a, label: a }));
+    leadsFilterOptions.vertical = DataStore.VERTICALS.map((v) => ({ value: v.key, label: v.label }));
+    leadsFilterOptions.addedBy = addedByNames.map((n) => ({ value: n, label: n }));
+
+    // Drop any selected values that no longer exist in the freshly loaded
+    // data (e.g. after a Refresh), then reflect that in each trigger label.
+    if (leadsMs) {
+      ["district", "area", "vertical", "addedBy"].forEach((key) => {
+        const valid = new Set(leadsFilterOptions[key].map((o) => o.value));
+        leadsFilters[key] = leadsFilters[key].filter((v) => valid.has(v));
+        leadsMs[key].updateLabel();
+      });
+    }
   }
 
   function wireFilterBar() {
-    document.getElementById("leadsDatePresets").addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-preset]");
-      if (!btn || btn.dataset.preset === "custom") return; // custom range is handled by DateRangePicker below
-      leadsFilters.preset = btn.dataset.preset;
-      leadsFilters.customStart = null;
-      leadsFilters.customEnd = null;
-      document.querySelectorAll("#leadsDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
-      renderLeadsFiltered();
-    });
-    DateRangePicker.attach(document.getElementById("leadsCustomRangeBtn"), {
-      getInitial: () => ({ start: leadsFilters.customStart, end: leadsFilters.customEnd }),
-      onApply: (start, end) => {
-        leadsFilters.preset = "custom";
-        leadsFilters.customStart = start;
-        leadsFilters.customEnd = end;
-        const btn = document.getElementById("leadsCustomRangeBtn");
-        btn.textContent = `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
-        document.querySelectorAll("#leadsDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
-        renderLeadsFiltered();
-      },
-      onClear: () => {
-        leadsFilters.preset = "all";
-        leadsFilters.customStart = null;
-        leadsFilters.customEnd = null;
-        const btn = document.getElementById("leadsCustomRangeBtn");
-        btn.textContent = "Custom Range";
-        document.querySelectorAll("#leadsDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
-        renderLeadsFiltered();
-      },
-    });
-    document.getElementById("leadsDistrictSelect").addEventListener("change", (e) => {
-      leadsFilters.district = e.target.value;
-      renderLeadsFiltered();
-    });
-    document.getElementById("leadsAreaSelect").addEventListener("change", (e) => {
-      leadsFilters.area = e.target.value;
-      renderLeadsFiltered();
-    });
-    document.getElementById("leadsVerticalSelect").addEventListener("change", (e) => {
-      leadsFilters.vertical = e.target.value;
-      renderLeadsFiltered();
-    });
-    document.getElementById("leadsGenderSelect").addEventListener("change", (e) => {
-      leadsFilters.gender = e.target.value;
-      renderLeadsFiltered();
-    });
-    document.getElementById("leadsAddedBySelect").addEventListener("change", (e) => {
-      leadsFilters.addedBy = e.target.value;
-      renderLeadsFiltered();
-    });
+    leadsMs = {
+      district: MultiSelect.attach(document.getElementById("leadsDistrictMs"), {
+        getOptions: () => leadsFilterOptions.district,
+        getSelected: () => leadsFilters.district,
+        onApply: (values) => {
+          leadsFilters.district = values;
+          renderLeadsFiltered();
+        },
+      }),
+      area: MultiSelect.attach(document.getElementById("leadsAreaMs"), {
+        getOptions: () => leadsFilterOptions.area,
+        getSelected: () => leadsFilters.area,
+        onApply: (values) => {
+          leadsFilters.area = values;
+          renderLeadsFiltered();
+        },
+      }),
+      vertical: MultiSelect.attach(document.getElementById("leadsVerticalMs"), {
+        getOptions: () => leadsFilterOptions.vertical,
+        getSelected: () => leadsFilters.vertical,
+        onApply: (values) => {
+          leadsFilters.vertical = values;
+          renderLeadsFiltered();
+        },
+      }),
+      addedBy: MultiSelect.attach(document.getElementById("leadsAddedByMs"), {
+        getOptions: () => leadsFilterOptions.addedBy,
+        getSelected: () => leadsFilters.addedBy,
+        onApply: (values) => {
+          leadsFilters.addedBy = values;
+          renderLeadsFiltered();
+        },
+      }),
+    };
+
     document.getElementById("leadsClearFiltersBtn").addEventListener("click", () => {
-      leadsFilters.preset = "all";
-      leadsFilters.district = "";
-      leadsFilters.area = "";
-      leadsFilters.vertical = "";
-      leadsFilters.gender = "";
-      leadsFilters.addedBy = "";
-      leadsFilters.customStart = null;
-      leadsFilters.customEnd = null;
-      document.getElementById("leadsCustomRangeBtn").textContent = "Custom Range";
-      document.querySelectorAll("#leadsDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
-      document.getElementById("leadsDistrictSelect").value = "";
-      document.getElementById("leadsAreaSelect").value = "";
-      document.getElementById("leadsVerticalSelect").value = "";
-      document.getElementById("leadsGenderSelect").value = "";
-      document.getElementById("leadsAddedBySelect").value = "";
+      leadsFilters.district = [];
+      leadsFilters.area = [];
+      leadsFilters.vertical = [];
+      leadsFilters.addedBy = [];
+      Object.values(leadsMs).forEach((ms) => ms.updateLabel());
       renderLeadsFiltered();
     });
   }
@@ -391,57 +346,23 @@
     renderTable(filtered);
   }
 
-  /* ---------------- KPI row (fixed periods, never filtered) ---------------- */
-
-  // Same up/down/flat trend-badge pattern already used on Overview's KPI
-  // row (see overview.html's trendBadge), just bigger (".big") and generic
-  // over DataStore.periodOverPeriod's {current, previous, deltaPct,
-  // direction} shape instead of weekOverWeek's — each card compares
-  // against its own natural predecessor period (see renderKpiRow below).
-  function trendBadge(pop, periodLabel) {
-    if (pop.deltaPct === null) {
-      return pop.current > 0
-        ? `<span class="ov-kpi-trend big up">${Icons.svg("trending-up", { size: 14 })}New</span>`
-        : `<span class="ov-kpi-trend big flat">${Icons.svg("minus", { size: 14 })}No activity yet</span>`;
-    }
-    if (pop.direction === "flat") return `<span class="ov-kpi-trend big flat">${Icons.svg("minus", { size: 14 })}Same as ${periodLabel}</span>`;
-    const icon = pop.direction === "up" ? "trending-up" : "trending-down";
-    const sign = pop.direction === "up" ? "+" : "";
-    return `<span class="ov-kpi-trend big ${pop.direction}">${Icons.svg(icon, { size: 14 })}${sign}${pop.deltaPct}% vs ${periodLabel}</span>`;
-  }
+  /* ---------------- KPI row (a single all-time total) ----------------
+     Used to also show Added Today/This Week/This Month, computed off the
+     "Date Contacted" field. Removed per feedback: this sheet has no real
+     "date added" column, so those cards were actually measuring contact
+     activity, not new leads — and that same (correctly labeled) view
+     already exists on the Calls page. Just the plain total remains here. */
 
   function renderKpiRow() {
     const all = DataStore.getAllRecords();
-    const { startOfDay, startOfWeek, startOfMonth, addDays } = DataStore._dateHelpers;
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const weekStart = startOfWeek(now);
-    const monthStart = startOfMonth(now);
-    const countSince = (start) => all.filter((r) => r.dateContacted && r.dateContacted >= start).length;
-
-    const cards = [
-      // Total Leads shows just the plain count — no trend arrow (per request:
-      // this is an all-time total, a week-over-week comparison against it
-      // doesn't mean much the way it does for the period-bound cards below).
-      { tone: "leads", icon: "target", value: all.length, label: "Total Leads", sub: "All-time", noArrow: true },
-      { tone: "calls", icon: "calendar", value: countSince(todayStart), label: "Added Today", sub: "New leads today", pop: DataStore.periodOverPeriod(all, () => true, "day"), popLabel: "yesterday" },
-      { tone: "teal", icon: "trending-up", value: countSince(weekStart), label: "Added This Week", sub: "Since Monday", pop: DataStore.periodOverPeriod(all, () => true, "week"), popLabel: "last week" },
-      { tone: "indigo", icon: "bar-chart-2", value: countSince(monthStart), label: "Added This Month", sub: "Since the 1st", pop: DataStore.periodOverPeriod(all, () => true, "month"), popLabel: "last month" },
-    ];
-
-    document.getElementById("leadsKpiRow").innerHTML = cards
-      .map(
-        (c) => `
-      <div class="ov-kpi-card tone-${c.tone}">
+    document.getElementById("leadsKpiRow").innerHTML = `
+      <div class="ov-kpi-card tone-leads">
         <div class="ov-kpi-top">
-          <div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div>
-          ${c.noArrow ? "" : trendBadge(c.pop, c.popLabel)}
+          <div class="ov-kpi-icon">${Icons.svg("target", { size: 18 })}</div>
         </div>
-        <div class="ov-kpi-value kpi-value-big">${c.value.toLocaleString()}</div>
-        <div class="ov-kpi-label">${I18n.t(c.label)} &middot; ${I18n.t(c.sub)}</div>
-      </div>`
-      )
-      .join("");
+        <div class="ov-kpi-value kpi-value-big">${all.length.toLocaleString()}</div>
+        <div class="ov-kpi-label">${I18n.t("Total Leads")} &middot; ${I18n.t("All-time")}</div>
+      </div>`;
   }
 
   /* ---------------- all-time vertical grid ----------------
@@ -540,7 +461,7 @@
      ============================================================ */
 
   const AI_SUGGESTIONS = [
-    "How many leads this week?",
+    "How many leads total?",
     "Which vertical needs focus?",
     "Follow-up backlog?",
     "Top caller?",
@@ -579,20 +500,8 @@
     if (/connect rate/.test(q)) {
       return `Overall call connect rate is <strong>${kpis.callConnectRate}%</strong> (${kpis.totalCalled} of ${kpis.totalLeads} leads called).`;
     }
-    if (/today/.test(q) && /lead/.test(q)) {
-      return `<strong>${DataStore.kpis(records).callsToday ?? 0}</strong> calls were made today. Use the "Added Today" card above for new leads today.`;
-    }
-    if (/this week/.test(q) && /lead/.test(q)) {
-      const { startOfWeek } = DataStore._dateHelpers;
-      const start = startOfWeek(new Date());
-      const count = records.filter((r) => r.dateContacted && r.dateContacted >= start).length;
-      return `<strong>${count}</strong> leads have been added this week so far.`;
-    }
-    if (/this month/.test(q) && /lead/.test(q)) {
-      const { startOfMonth } = DataStore._dateHelpers;
-      const start = startOfMonth(new Date());
-      const count = records.filter((r) => r.dateContacted && r.dateContacted >= start).length;
-      return `<strong>${count}</strong> leads have been added this month so far.`;
+    if ((/today|this week|this month/.test(q)) && /lead/.test(q)) {
+      return `<strong>${DataStore.kpis(records).callsToday ?? 0}</strong> calls were made today. This sheet doesn't have a real "date added" for leads, so day/week/month lead counts live on the Calls page instead (that's based on Date Contacted, which is a real field).`;
     }
     if (/how many lead|total lead/.test(q)) {
       return `There are <strong>${kpis.totalLeads}</strong> leads on file in total.`;

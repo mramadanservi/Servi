@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Sources — Caregivers</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Caregivers — Sources</h1>
+      <p class="page-subheading">Every Caregivers-tagged source across Facebook Groups, Academies & Institutions & Freelancer Platforms — who they are, how to reach them, and who's next.</p>
+    </div>
+  </div>
+
+  <div class="src-notice">
+    <span class="src-notice-icon" id="vsNoticeIcon"></span>
+    <span><strong>Snapshot data, not live yet.</strong> Computed from the 3 source lists that tag Caregivers (Facebook Groups, Academies & Institutions & Freelancer Platforms) as of Sep 17, 2026. Once each is a connected live Google Sheet, this page reads them the same read-only way Leads and Applied already do.</span>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2>At a glance</h2>
+      <span class="ov-hint">Across all 3 source types</span>
+    </div>
+    <div class="ov-kpi-row cols-4" id="vsKpiRow1"></div>
+  </section>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2 id="vsRow2Title">A closer look at the top source type</h2>
+      <span class="ov-hint" id="vsRow2Hint"></span>
+    </div>
+    <div class="ov-kpi-row cols-3" id="vsKpiRow2"></div>
+  </section>
+
+  <section class="ov-card leads-filter-card">
+    <div class="ov-card-header">
+      <h2>Filter &amp; sort</h2>
+      <span class="ov-hint">Applies to the list below</span>
+    </div>
+    <div class="leads-filter-bar">
+      <div class="leads-filter-selects">
+        <div class="leads-select-wrap">
+          <span class="leads-select-label">Source Type</span>
+          <button type="button" id="vsSourceTypeMs"></button>
+        </div>
+        <div class="leads-select-wrap">
+          <span class="leads-select-label">Contacted</span>
+          <button type="button" id="vsContactedMs"></button>
+        </div>
+        <div class="leads-select-wrap">
+          <span class="leads-select-label">Sort by</span>
+          <select id="vsSortSelect">
+            <option value="followersDesc">Followers (high to low)</option>
+            <option value="nameAsc">Name (A–Z)</option>
+            <option value="sourceType">Source type</option>
+            <option value="contactedFirst">Contacted first</option>
+            <option value="notContactedFirst">Not contacted first</option>
+          </select>
+        </div>
+        <button type="button" class="leads-clear-btn" id="vsClearFiltersBtn">Clear filters</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card leads-table-card">
+        <div class="ov-card-header">
+          <h2>All Caregivers sources</h2>
+          <span class="ov-hint" id="vsTableHint"></span>
+        </div>
+        <div class="leads-table-toolbar">
+          <label class="leads-search-wrap">
+            <span id="vsSearchIcon"></span>
+            <input type="text" id="vsTableSearch" placeholder="Search name, admin, phone…" />
+          </label>
+        </div>
+        <div class="leads-table-scroll">
+          <table class="leads-table" id="vsTable">
+            <thead>
+              <tr>
+                <th data-sort="sourceType">Source Type</th>
+                <th data-sort="name">Name</th>
+                <th data-sort="followers">Followers</th>
+                <th data-sort="adminName">Admin / Contact</th>
+                <th data-sort="phone">Phone</th>
+                <th data-sort="contacted">Contacted</th>
+                <th>Notes / Link</th>
+              </tr>
+            </thead>
+            <tbody id="vsTableBody"></tbody>
+          </table>
+        </div>
+        <div class="leads-table-pagination" id="vsTablePagination"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Outreach Progress</h2>
+          <span class="ov-hint">How much of each pool has actually been contacted</span>
+        </div>
+        <div class="ov-goals-grid" id="vsProgressRings"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Top reach opportunities</h2>
+          <span class="ov-hint">Biggest Facebook Groups not yet marked contacted — one message here reaches the most people</span>
+        </div>
+        <div class="ov-followup-list" id="vsTopOpportunities"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="vsInsights"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/multiSelect.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sourcesData.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     VS_ENTITIES — snapshot dataset, not invented
+     ------------------------------------------------------------
+     Every row below was extracted from the real Excel exports of the
+     source lists that tag "Caregivers": same extraction + Outreach
+     Tracker join used for the Tutors tab (see sources-tutors.html's
+     own comment for the full method), filtered down to the rows whose
+     normalized vertical list includes "Caregivers". "contacted" is
+     tri-state (true / false / unknown) but every yes/no shown on this
+     page reads it as `contacted === true` — a blank tracker cell counts
+     as "not yet contacted", never assumed done. "followers" is only
+     ever populated for Facebook Groups — other source types' row
+     counts (e.g. a platform's "freelancers extracted") aren't audience
+     sizes and are kept out of this field so it never gets misread as
+     reach.
+
+     Once these sources are connected as live Google Sheets, this
+     constant gets replaced by SheetsClient fetches the same way
+     fetchAll()/fetchApplied() work — nothing that reads VS_ENTITIES
+     below needs to change.
+     ============================================================ */
+  const VS_LABEL = "Caregivers";
+  const VS_ENTITIES = [{"sourceType": "Facebook Groups", "name": "Parents of children with challenges...Different not less", "link": "https://www.facebook.com/share/g/173tEKf4VM/?mibextid=wwXIfr", "followers": 5700.0, "contacted": true, "adminName": "Rasha Ayash Rana Chehab Najah-Rita Atallah", "phone": "", "email": "", "status": "FUP", "notes": "Private group, likely relevant."}, {"sourceType": "Facebook Groups", "name": "Mommy Classifieds, Beirut, Lebanon", "link": "https://www.facebook.com/share/g/18wwGzNmnK/?mibextid=wwXIfr", "followers": 57900.0, "contacted": true, "adminName": "Amani Hamze Vanessa Nassif Rima Mikati", "phone": "", "email": "", "status": "FUP", "notes": "Private Group. Buying and selling new and used items for mothers and children."}, {"sourceType": "Academies & Institutions", "name": "CIS", "link": "CIS College", "followers": null, "contacted": true, "adminName": "", "phone": "81 709 770", "email": "", "status": "FUP Call", "notes": "Called Hiba from CIS; she referred us to Career Services. FUP"}, {"sourceType": "Academies & Institutions", "name": "Beit Chabab Technical Institute", "link": "Beit Chabab Technical Institutions", "followers": null, "contacted": null, "adminName": "", "phone": "04 981 818", "email": "", "status": "", "notes": ""}, {"sourceType": "Freelancer Platforms", "name": "SPAN", "link": "https://span.it.com/about/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "notes": "IOS only App, message and call in app (must be connected/following), no numbers"}, {"sourceType": "Freelancer Platforms", "name": "Yelleb", "link": "Yelleb", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "Yes", "notes": "Numbers available, but mostly stores"}, {"sourceType": "Freelancer Platforms", "name": "Medi-to-home", "link": "https://meditohome.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "No", "notes": "The company assigns you freelancers, you cant manually search for them"}];
+  const VS_SOURCE_TYPES = ["Facebook Groups", "Academies & Institutions", "Freelancer Platforms"];
+
+  const escapeHtml = SourcesData.escapeHtml;
+
+  function fmtNum(n) {
+    return n == null ? "—" : n.toLocaleString();
+  }
+
+  const SINGULAR = {
+    "Facebook Groups": "Facebook Group",
+    "Academies & Institutions": "Academy",
+    "Syndicates": "Syndicate",
+    "Freelancer Platforms": "Freelancer Platform",
+    "Tutoring Centers": "Tutoring Center",
+    "Nursing Schools/Programs": "Nursing School",
+  };
+
+  /* ---------------- header row 1 (cross-source-type) ---------------- */
+
+  function computeHeaderKpis(entities) {
+    const total = entities.length;
+    const contacted = entities.filter((e) => e.contacted === true).length;
+    const totalFollowers = entities.reduce((s, e) => s + (e.followers || 0), 0);
+    const byType = {};
+    VS_SOURCE_TYPES.forEach((t) => (byType[t] = 0));
+    entities.forEach((e) => (byType[e.sourceType] = (byType[e.sourceType] || 0) + 1));
+    const topType = VS_SOURCE_TYPES.slice().sort((a, b) => byType[b] - byType[a])[0];
+    return { total, contacted, totalFollowers, byType, topType, topTypeCount: byType[topType] };
+  }
+
+  /* ---------------- header row 2 (drill into the top source type) ---------------- */
+
+  function computeDrilldown(entities, topType) {
+    const list = entities.filter((e) => e.sourceType === topType);
+    const hasFollowers = list.some((e) => e.followers != null && e.followers > 0);
+    const notContacted = list.filter((e) => e.contacted !== true).length;
+
+    if (hasFollowers) {
+      const sorted = list.slice().sort((a, b) => (b.followers || 0) - (a.followers || 0));
+      return { mode: "followers", featured: sorted[0], total: list.length, notContacted };
+    }
+
+    const scored = list
+      .map((e) => ({ e, score: (e.adminName ? 1 : 0) + (e.phone ? 1 : 0) + (e.email ? 1 : 0) }))
+      .sort((a, b) => b.score - a.score || a.e.name.localeCompare(b.e.name));
+    const fullyDocumented = list.filter((e) => e.adminName && e.phone).length;
+    return { mode: "completeness", featured: scored[0].e, total: list.length, notContacted, fullyDocumented };
+  }
+
+  function renderHeaderKpis() {
+    const kpis = computeHeaderKpis(VS_ENTITIES);
+    const contactedPct = kpis.total ? Math.round((kpis.contacted / kpis.total) * 100) : 0;
+    const topShare = kpis.total ? Math.round((kpis.topTypeCount / kpis.total) * 100) : 0;
+    const hasAnyFollowers = kpis.totalFollowers > 0;
+    const hasFbAtAll = VS_ENTITIES.some((e) => e.sourceType === "Facebook Groups");
+
+    const followerSub = hasAnyFollowers
+      ? `combined Facebook followers across ${escapeHtml(VS_LABEL)}-tagged groups only — the other source types don't track an audience size`
+      : hasFbAtAll
+      ? `the Facebook Groups tagged to ${escapeHtml(VS_LABEL)} don't have a tracked follower count yet`
+      : `${escapeHtml(VS_LABEL)} doesn't have any Facebook Group sources yet — that's the only source type that tracks an audience size`;
+
+    const row1 = [
+      { tone: "leads", icon: "list-checks", value: fmtNum(kpis.total), label: `TOTAL ${VS_LABEL.toUpperCase()} SOURCES`, sub: `every ${VS_LABEL}-tagged source across all ${VS_SOURCE_TYPES.length} relevant source type${VS_SOURCE_TYPES.length === 1 ? "" : "s"} combined` },
+      { tone: "teal", icon: "phone-call", value: `${fmtNum(kpis.contacted)} / ${fmtNum(kpis.total)}`, label: `${VS_LABEL.toUpperCase()} SOURCES CONTACTED`, sub: `${contactedPct}% of all ${VS_LABEL} sources have a logged "Yes"/"Called" — the rest are blank, not confirmed "no"`, big: true },
+      { tone: "indigo", icon: "globe", value: fmtNum(kpis.totalFollowers), label: `${VS_LABEL.toUpperCase()} SOURCES FOLLOWER COUNT`, sub: followerSub },
+      { tone: "calls", icon: "crown", value: kpis.topType, label: `MOST IMPORTANT SOURCE FOR ${VS_LABEL.toUpperCase()}`, sub: `${fmtNum(kpis.topTypeCount)} of ${fmtNum(kpis.total)} ${VS_LABEL} sources (${topShare}%) come from here — more than any other source type`, big: true },
+    ];
+
+    document.getElementById("vsKpiRow1").innerHTML = row1
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}" title="${escapeHtml(c.label)}: ${escapeHtml(c.sub)}">
+        <div class="ov-kpi-top"><div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div></div>
+        <div class="ov-kpi-value${c.big ? " kpi-value-text" : ""}">${escapeHtml(c.value)}</div>
+        <div class="ov-kpi-label">${escapeHtml(c.label)} &middot; ${escapeHtml(c.sub)}</div>
+      </div>`
+      )
+      .join("");
+
+    const drill = computeDrilldown(VS_ENTITIES, kpis.topType);
+    document.getElementById("vsRow2Title").textContent = `Inside ${kpis.topType} — the top source type for ${VS_LABEL}`;
+    document.getElementById("vsRow2Hint").textContent =
+      drill.mode === "followers"
+        ? "The single biggest group here, and how much of this source type is still untouched"
+        : `${kpis.topType} doesn't track an audience size, so "most relevant" here means most ready to call — a named contact plus a phone number`;
+
+    const typeSingular = (SINGULAR[kpis.topType] || kpis.topType).toUpperCase();
+    let cardA, cardB;
+    if (drill.mode === "followers") {
+      cardA = { tone: "applied", icon: "star", value: drill.featured.name, label: `MOST-FOLLOWED ${typeSingular}`, sub: "the single largest audience inside this source type", big: true };
+      cardB = { tone: "leads", icon: "globe", value: fmtNum(drill.featured.followers), label: "ITS FOLLOWER COUNT", sub: `how many people one post in "${drill.featured.name}" could reach` };
+    } else {
+      cardA = { tone: "applied", icon: "star", value: drill.featured.name, label: `MOST CONTACT-READY ${typeSingular}`, sub: "has both a named contact and a phone number on file — the easiest one to call first", big: true };
+      cardB = { tone: "leads", icon: "users", value: `${fmtNum(drill.fullyDocumented)} / ${fmtNum(drill.total)}`, label: "FULLY DOCUMENTED", sub: `have both a named contact and a phone number — the rest only have a phone, if that` };
+    }
+    const cardC = { tone: "red", icon: "target", value: `${fmtNum(drill.notContacted)} / ${fmtNum(drill.total)}`, label: `NOT YET CONTACTED IN ${kpis.topType.toUpperCase()}`, sub: `the untouched opportunity inside your single biggest ${VS_LABEL} source type` };
+
+    document.getElementById("vsKpiRow2").innerHTML = [cardA, cardB, cardC]
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}" title="${escapeHtml(c.label)}: ${escapeHtml(c.sub)}">
+        <div class="ov-kpi-top"><div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div></div>
+        <div class="ov-kpi-value${c.big ? " kpi-value-text" : ""}">${escapeHtml(c.value)}</div>
+        <div class="ov-kpi-label">${escapeHtml(c.label)} &middot; ${escapeHtml(c.sub)}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- outreach progress rings ---------------- */
+
+  function ringSvg(percent, tone) {
+    const r = 30;
+    const c = 2 * Math.PI * r;
+    const clamped = Math.max(0, Math.min(100, percent));
+    const offset = c - (clamped / 100) * c;
+    return `
+      <svg viewBox="0 0 74 74" class="goal-ring">
+        <circle cx="37" cy="37" r="${r}" class="goal-ring-track" />
+        <circle cx="37" cy="37" r="${r}" class="goal-ring-fill tone-${tone}"
+          stroke-dasharray="${c}" stroke-dashoffset="${offset}" transform="rotate(-90 37 37)" />
+        <text x="37" y="42" text-anchor="middle" class="goal-ring-text">${Math.round(clamped)}%</text>
+      </svg>`;
+  }
+
+  function renderProgressRings() {
+    const kpis = computeHeaderKpis(VS_ENTITIES);
+    const topList = VS_ENTITIES.filter((e) => e.sourceType === kpis.topType);
+    const topContactedPct = topList.length ? (topList.filter((e) => e.contacted === true).length / topList.length) * 100 : 0;
+    const overallPct = kpis.total ? (kpis.contacted / kpis.total) * 100 : 0;
+    const hasPhoneCount = VS_ENTITIES.filter((e) => e.phone).length;
+    const hasPhonePct = kpis.total ? (hasPhoneCount / kpis.total) * 100 : 0;
+
+    const rings = [
+      { pct: overallPct, tone: "primary", value: `${kpis.contacted}/${kpis.total}`, label: `All ${VS_LABEL} sources contacted` },
+      { pct: topContactedPct, tone: "purple", value: `${topList.filter((e) => e.contacted === true).length}/${topList.length}`, label: `${kpis.topType} contacted` },
+      { pct: hasPhonePct, tone: "teal", value: `${hasPhoneCount}/${kpis.total}`, label: "Have a phone number on file" },
+    ];
+
+    document.getElementById("vsProgressRings").innerHTML = rings
+      .map(
+        (r) => `
+      <div class="ov-goal-card" title="${escapeHtml(r.label)}">
+        ${ringSvg(r.pct, r.tone)}
+        <div class="ov-goal-value">${escapeHtml(r.value)}</div>
+        <div class="ov-goal-label">${escapeHtml(r.label)}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- top reach opportunities ---------------- */
+
+  function renderTopOpportunities() {
+    const fbEntities = VS_ENTITIES.filter((e) => e.sourceType === "Facebook Groups");
+    const notContacted = fbEntities
+      .filter((e) => e.contacted !== true && e.followers)
+      .slice()
+      .sort((a, b) => b.followers - a.followers)
+      .slice(0, 5);
+    const wrap = document.getElementById("vsTopOpportunities");
+    if (!fbEntities.length) {
+      wrap.innerHTML = `<p class="ov-empty-hint">${escapeHtml(VS_LABEL)} doesn't have any Facebook Group sources yet — reach here happens through the other source types instead.</p>`;
+      return;
+    }
+    if (!notContacted.length) {
+      wrap.innerHTML = `<p class="ov-empty-hint">Every Facebook Group with a tracked follower count has already been marked contacted.</p>`;
+      return;
+    }
+    wrap.innerHTML = notContacted
+      .map(
+        (e) => `
+      <div class="ov-followup-row urgent">
+        <div class="ov-followup-icon">${Icons.svg("globe", { size: 15 })}</div>
+        <div class="ov-followup-info">
+          <div class="ov-followup-name">${escapeHtml(e.name)}</div>
+          <div class="ov-followup-phone">${fmtNum(e.followers)} followers &middot; ${escapeHtml(e.sourceType)}</div>
+        </div>
+        <span class="ov-followup-days">Not contacted</span>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- AI insights (rule-based, from real numbers) ---------------- */
+
+  function renderInsights() {
+    const kpis = computeHeaderKpis(VS_ENTITIES);
+    const drill = computeDrilldown(VS_ENTITIES, kpis.topType);
+    const insights = [];
+
+    insights.push({
+      tone: "red",
+      icon: "target",
+      html: `<strong>${escapeHtml(kpis.topType)}</strong> makes up ${fmtNum(kpis.topTypeCount)} of your ${fmtNum(kpis.total)} ${escapeHtml(VS_LABEL)} sources, but only ${fmtNum(kpis.topTypeCount - drill.notContacted)} of them have been contacted — that's ${fmtNum(drill.notContacted)} untouched leads in your single biggest pool.`,
+    });
+
+    const topOpp = VS_ENTITIES.filter((e) => e.sourceType === "Facebook Groups" && e.contacted !== true && e.followers).sort((a, b) => b.followers - a.followers)[0];
+    if (topOpp) {
+      insights.push({
+        tone: "amber",
+        icon: "globe",
+        html: `<strong>${escapeHtml(topOpp.name)}</strong> (${fmtNum(topOpp.followers)} followers) hasn't been logged as contacted yet — reaching this one Facebook Group alone could put you in front of more people than every other ${escapeHtml(VS_LABEL)} Facebook Group combined.`,
+      });
+    }
+
+    const phoneCoverage = VS_ENTITIES.filter((e) => e.phone).length;
+    if (kpis.total) {
+      insights.push({
+        tone: "green",
+        icon: "phone",
+        html: `${fmtNum(phoneCoverage)} of ${fmtNum(kpis.total)} ${escapeHtml(VS_LABEL)} sources (${Math.round((phoneCoverage / kpis.total) * 100)}%) already have a phone number on file.`,
+      });
+    }
+
+    const unstarted = VS_SOURCE_TYPES.filter((t) => kpis.byType[t] > 0 && VS_ENTITIES.filter((e) => e.sourceType === t && e.contacted === true).length === 0);
+    const overallPct = kpis.total ? Math.round((kpis.contacted / kpis.total) * 100) : 0;
+    insights.push({
+      tone: "amber",
+      icon: "phone-call",
+      html: unstarted.length
+        ? `Only ${overallPct}% of all ${escapeHtml(VS_LABEL)} sources have been logged as contacted so far — ${escapeHtml(unstarted.join(" and "))} ${unstarted.length === 1 ? "hasn't" : "haven't"} been started on at all yet.`
+        : `${overallPct}% of all ${escapeHtml(VS_LABEL)} sources have been logged as contacted so far — every source type has at least one contact logged.`,
+    });
+
+    document.getElementById("vsInsights").innerHTML = insights
+      .slice(0, 4)
+      .map((i) => `<div class="ov-insight-row ov-insight-tone-${i.tone}"><span class="ov-insight-icon">${Icons.svg(i.icon, { size: 15 })}</span><span class="ov-insight-text">${i.html}</span></div>`)
+      .join("");
+  }
+
+  /* ---------------- filters ---------------- */
+
+  const vsState = { filters: { sourceTypes: [], contacted: [] }, sort: "followersDesc" };
+
+  function filteredVs() {
+    const { sourceTypes, contacted } = vsState.filters;
+    return VS_ENTITIES.filter((e) => {
+      if (sourceTypes.length && !sourceTypes.includes(e.sourceType)) return false;
+      if (contacted.length) {
+        const isContacted = e.contacted === true;
+        if (contacted.includes("yes") && !contacted.includes("no") && !isContacted) return false;
+        if (contacted.includes("no") && !contacted.includes("yes") && isContacted) return false;
+      }
+      return true;
+    });
+  }
+
+  function initFilters() {
+    const sourceTypeMs = MultiSelect.attach(document.getElementById("vsSourceTypeMs"), {
+      getOptions: () => VS_SOURCE_TYPES.map((t) => ({ value: t, label: t })),
+      getSelected: () => vsState.filters.sourceTypes,
+      onApply: (values) => { vsState.filters.sourceTypes = values; renderTableFromFilters(); },
+      placeholder: "All",
+    });
+    const contactedMs = MultiSelect.attach(document.getElementById("vsContactedMs"), {
+      getOptions: () => [
+        { value: "yes", label: "Contacted" },
+        { value: "no", label: "Not contacted" },
+      ],
+      getSelected: () => vsState.filters.contacted,
+      onApply: (values) => { vsState.filters.contacted = values; renderTableFromFilters(); },
+      placeholder: "All",
+    });
+    document.getElementById("vsSortSelect").addEventListener("change", (e) => {
+      vsState.sort = e.target.value;
+      renderTableFromFilters();
+    });
+    document.getElementById("vsClearFiltersBtn").addEventListener("click", () => {
+      vsState.filters = { sourceTypes: [], contacted: [] };
+      vsState.sort = "followersDesc";
+      document.getElementById("vsSortSelect").value = "followersDesc";
+      [sourceTypeMs, contactedMs].forEach((ms) => ms.updateLabel());
+      renderTableFromFilters();
+    });
+  }
+
+  function renderTableFromFilters() {
+    renderTable(filteredVs());
+  }
+
+  /* ---------------- table — searchable + sortable + paginated ---------------- */
+
+  const tableState = { search: "", page: 1, pageSize: 25, records: [] };
+
+  function sortComparator(a, b) {
+    switch (vsState.sort) {
+      case "nameAsc":
+        return a.name.localeCompare(b.name);
+      case "sourceType":
+        return a.sourceType.localeCompare(b.sourceType) || a.name.localeCompare(b.name);
+      case "contactedFirst":
+        return (b.contacted === true) - (a.contacted === true) || a.name.localeCompare(b.name);
+      case "notContactedFirst":
+        return (a.contacted === true) - (b.contacted === true) || a.name.localeCompare(b.name);
+      case "followersDesc":
+      default:
+        return (b.followers || 0) - (a.followers || 0);
+    }
+  }
+
+  // Several source sheets put a real URL in the "Links" column, but others
+  // put a plain page name or handle instead — only treat it as clickable
+  // when it actually looks like a bare domain/URL: no internal whitespace,
+  // and a domain-shaped tail.
+  function isLikelyUrl(s) {
+    if (!s) return false;
+    const t = s.trim();
+    if (!t || /\s/.test(t)) return false;
+    return /^https?:\/\//i.test(t) || /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(t);
+  }
+
+  function wireTable() {
+    document.getElementById("vsTableSearch").addEventListener("input", (e) => {
+      tableState.search = e.target.value.trim().toLowerCase();
+      tableState.page = 1;
+      renderTableBody();
+    });
+    document.getElementById("vsTable").querySelector("thead").addEventListener("click", (e) => {
+      const th = e.target.closest("th[data-sort]");
+      if (!th) return;
+      const map = { sourceType: "sourceType", name: "nameAsc", followers: "followersDesc", adminName: "nameAsc", phone: "nameAsc", contacted: "contactedFirst" };
+      vsState.sort = map[th.dataset.sort] || "followersDesc";
+      document.getElementById("vsSortSelect").value = vsState.sort;
+      renderTableBody();
+    });
+  }
+
+  function renderTable(records) {
+    tableState.records = records;
+    tableState.page = 1;
+    renderTableBody();
+  }
+
+  function renderTableBody() {
+    const { search, pageSize } = tableState;
+    let rows = tableState.records;
+
+    if (search) {
+      rows = rows.filter((r) => [r.name, r.adminName, r.phone, r.email, r.sourceType].join(" ").toLowerCase().includes(search));
+    }
+
+    rows = rows.slice().sort(sortComparator);
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    tableState.page = Math.min(tableState.page, totalPages);
+    const start = (tableState.page - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
+
+    document.getElementById("vsTableHint").textContent = `${rows.length.toLocaleString()} ${escapeHtml(VS_LABEL)} source${rows.length === 1 ? "" : "s"} matching current filters`;
+
+    document.getElementById("vsTableBody").innerHTML = pageRows
+      .map((r) => {
+        const contactedPill = r.contacted === true
+          ? `<span class="leads-table-status-pill applied">Contacted</span>`
+          : `<span class="leads-table-status-pill notApplied">Not contacted</span>`;
+        const noteBits = [];
+        if (isLikelyUrl(r.link)) {
+          const href = /^https?:\/\//i.test(r.link.trim()) ? r.link.trim() : "https://" + r.link.trim();
+          noteBits.push(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener" title="Open link">${Icons.svg("arrow-up-right", { size: 13 })}</a>`);
+        }
+        const noteText = r.status || r.notes || "";
+        return `
+        <tr>
+          <td title="${escapeHtml(SourcesData.SOURCE_TYPE_EXPLAINERS[r.sourceType] || "")}">${escapeHtml(r.sourceType)}</td>
+          <td>${escapeHtml(r.name)}</td>
+          <td>${r.followers ? fmtNum(r.followers) : "—"}</td>
+          <td>${escapeHtml(r.adminName) || "—"}</td>
+          <td>${escapeHtml(r.phone) || "—"}</td>
+          <td>${contactedPill}</td>
+          <td class="tut-notes-cell" title="${escapeHtml(noteText)}">${noteBits.join(" ")} ${noteText ? escapeHtml(noteText.length > 40 ? noteText.slice(0, 40) + "…" : noteText) : (noteBits.length ? "" : "—")}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const pag = document.getElementById("vsTablePagination");
+    if (totalPages <= 1) {
+      pag.innerHTML = "";
+    } else {
+      pag.innerHTML = `
+        <button type="button" id="vsTablePrev" ${tableState.page <= 1 ? "disabled" : ""}>Prev</button>
+        <span>Page ${tableState.page} of ${totalPages}</span>
+        <button type="button" id="vsTableNext" ${tableState.page >= totalPages ? "disabled" : ""}>Next</button>`;
+      document.getElementById("vsTablePrev")?.addEventListener("click", () => { tableState.page--; renderTableBody(); });
+      document.getElementById("vsTableNext")?.addEventListener("click", () => { tableState.page++; renderTableBody(); });
+    }
+  }
+
+  /* ---------------- bootstrap ---------------- */
+
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    AppShell.init({ current: "sources-caregivers", root: ".." });
+    document.getElementById("vsNoticeIcon").innerHTML = Icons.svg("gauge", { size: 16 });
+    document.getElementById("vsSearchIcon").innerHTML = Icons.svg("search", { size: 15 });
+    renderHeaderKpis();
+    renderProgressRings();
+    renderTopOpportunities();
+    renderInsights();
+    initFilters();
+    wireTable();
+    renderTableFromFilters();
+  }
+</script>
+
+</body>
+</html>

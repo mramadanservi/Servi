@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Sources — Syndicates — Sources</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Syndicates — Sources</h1>
+      <p class="page-subheading">Official professional syndicates, unions and leagues tracked as Servi sources — one contact here can open the door to a whole membership.</p>
+    </div>
+  </div>
+
+  <div class="src-notice src-notice-compact">
+    <span class="src-notice-icon" id="srcNoticeIcon"></span>
+    <span><strong>Snapshot, not live yet.</strong> Computed from the Syndicates sheet as of Sep 17, 2026 — read-only, same as Leads and Applied.</span>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2>At a glance</h2>
+      <span class="ov-hint">Across every Syndicates source tracked</span>
+    </div>
+    <div class="ov-kpi-row cols-5" id="srcKpiRow"></div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Coverage by vertical</h2>
+          <span class="ov-hint">How this source type covers each of the 9 verticals</span>
+        </div>
+        <div class="src-vbox-grid" id="srcVboxGrid"></div>
+      </section>
+
+      <section class="ov-card leads-filter-card">
+        <div class="ov-card-header">
+          <h2>Filter &amp; sort</h2>
+          <span class="ov-hint">Applies to the list below</span>
+        </div>
+        <div class="leads-filter-bar">
+          <div class="leads-filter-selects">
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Vertical</span>
+              <button type="button" id="srcVerticalMs"></button>
+            </div>
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Contacted</span>
+              <button type="button" id="srcContactedMs"></button>
+            </div>
+            <div class="leads-select-wrap">
+              <span class="leads-select-label">Sort by</span>
+              <select id="srcSortSelect">
+                <option value="nameAsc">Name (A–Z)</option>
+                <option value="contactedFirst">Contacted first</option>
+                <option value="notContactedFirst">Not contacted first</option>
+              </select>
+            </div>
+            <button type="button" class="leads-clear-btn" id="srcClearFiltersBtn">Clear filters</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="ov-card leads-table-card">
+        <div class="ov-card-header">
+          <h2>All Syndicates</h2>
+          <span class="ov-hint" id="srcTableHint"></span>
+        </div>
+        <div class="leads-table-toolbar">
+          <label class="leads-search-wrap">
+            <span id="srcSearchIcon"></span>
+            <input type="text" id="srcTableSearch" placeholder="Search name, admin, phone…" />
+          </label>
+        </div>
+        <div class="leads-table-scroll">
+          <table class="leads-table" id="srcTable">
+            <thead>
+              <tr>
+                <th data-sort="name">Name</th>
+                <th>Vertical(s)</th>
+                <th class="src-followers-col" data-sort="followers">Followers</th>
+                <th>Admin / Contact</th>
+                <th>Phone</th>
+                <th data-sort="contacted">Contacted</th>
+                <th>Notes / Link</th>
+              </tr>
+            </thead>
+            <tbody id="srcTableBody"></tbody>
+          </table>
+        </div>
+        <div class="leads-table-pagination" id="srcTablePagination"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Syndicates by vertical</h2>
+          <span class="ov-hint">Visual breakdown of where these sources come from</span>
+        </div>
+        <div class="chart-wrap" id="srcChart"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="srcInsights"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/multiSelect.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sourcesData.js"></script>
+<script src="../shared/chart.js"></script>
+<script src="../shared/sourceTypePage.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     SYNDICATES_ENTITIES — snapshot dataset, not invented
+     ------------------------------------------------------------
+     Every row below was extracted from the real Excel export of the
+     Syndicates source list (23 rows). Same "snapshot, not
+     live yet" status as every other Sources page — once this list is
+     a connected live Google Sheet, this constant gets replaced by a
+     SheetsClient fetch the same way fetchAll()/fetchApplied() work.
+     Field shape: { name, verticals[], link, followers, contacted
+     (true/false/null — null/blank means "unknown", NOT "no"),
+     adminName, phone, email, status, area, notes }.
+     ============================================================ */
+  const SYNDICATES_ENTITIES = [{"name": "Teachers Syndicate of Lebanon (TSL) نقابة المعلّمين في لبنان", "verticals": ["Tutors"], "link": "‎نقابة المعلمين في لبنان‎ (@nakabi.teachers) • Facebook", "followers": null, "contacted": true, "adminName": "Nehme Mahfoud", "phone": "01 614 666", "email": "nakabatmouaalimean@hotmail.com", "status": "Send Additional Information", "area": "Badaro, Romeo & Juliette Building, 4th floor, Beirut", "notes": "The Organization that represents private school teachers in Lebanon and advocates for their professional and social rights.", "posted": false}, {"name": "League of Public Technical and Vocational Teachers (CETO) رابطة أساتذة التعليم المهني والتقني الرسمي", "verticals": ["Tutors"], "link": "المديرية العامة للتعليم المهني والتقني", "followers": null, "contacted": true, "adminName": "Farouq Al-Haraka", "phone": "01 693 707", "email": "ceto-lb@hotmail.com", "status": "No Answer, FUP", "area": "Dekwaneh, Beirut", "notes": "Equips students with the specific practical skills, scientific theories, and hands-on experience needed for specialized trades and professions.", "posted": false}, {"name": "Public Primary Schools Teachers League in Lebanon (PPSTLL) رابطة معلّمي التعليم الأساسي الرسمي في لبنان", "verticals": ["Tutors"], "link": "PPSTLL", "followers": null, "contacted": true, "adminName": "Manal Hdaife", "phone": "01 803 496", "email": "teachersunionleb@gmail.com", "status": "No Answer, FUP", "area": "UNESCO StreetBlock of Ministry of Culture near UNESCO palace, 2nd floor, Beirut", "notes": "Represents full-time teachers in public primary and intermediate schools.", "posted": false}, {"name": "League of Secondary Public School Teachers (LPESPL) رابطة أساتذة التعليم الثانوي الرسمي في لبنان", "verticals": ["Tutors"], "link": "LPESPL - رابطة اساتذة التعليم الثانوي في لبنان - ArabO", "followers": null, "contacted": null, "adminName": "Hanna Gharib", "phone": "01 803 205", "email": "lpespl@gmail.com", "status": "", "area": "Beirut", "notes": "The cultural, social and educational association of official secondary teachers in Lebanon", "posted": false}, {"name": "EdTech Syndicate in Lebanon نقابة تكنولوجيا التعليم في لبنان", "verticals": ["Tutors"], "link": "edtechsyndicate | Facebook | Linktree", "followers": null, "contacted": true, "adminName": "Dr. Rabih Baalbaki", "phone": "81 826 681", "email": "info@edtechs.org.lb", "status": "No Answer, FUP", "area": "Sami EL Solh , Mozannar Plaza 2, 3rd floor , Beirut, Lebanon", "notes": "Organization that aims to activate and modernize the educational technology profession in Lebanon.", "posted": false}, {"name": "Syndicate of Special Education Teachers نقابة أساتذة التربية المختصة", "verticals": ["Tutors"], "link": "https://www.facebook.com/orthopedagogue/about", "followers": null, "contacted": true, "adminName": "Dr. Asma Mjaes Azar", "phone": "03 485 877", "email": "info@orthopedagoguesliban.org", "status": "No Answer, FUP", "area": "Jal El Dib, main highway, JR Center", "notes": "Specialized education which evaluates and treats learning difficulties and disabilities", "posted": false}, {"name": "League of Full-Time Professors at the Lebanese University رابطة الأساتذة المتفرغين في الجامعة اللبنانية", "verticals": ["Tutors"], "link": "Teaching Staff | Lebanese University", "followers": null, "contacted": true, "adminName": "Yehya Rabih", "phone": "03 557 670", "email": "ligueprofsul@yahoo.com", "status": "Closed", "area": "Building of the Central Administration of the Lebanese University, Museum, Beirut", "notes": "The official union representing the teaching staff of the Lebanese University.", "posted": false}, {"name": "Committee of Contractual Teachers at the Lebanese University لجنة الأساتذة المتعاقدين في الجامعة اللبنانية", "verticals": ["Tutors"], "link": "https://ul.edu.lb/en/contact-us", "followers": null, "contacted": false, "adminName": "Bassam Badran", "phone": "", "email": "recteur@ul.edu.lb", "status": "", "area": "Building of the Central Administration of the Lebanese University, Museum, Beirut", "notes": "This independent body represents the part-time and hourly contract professors. Fighting for fair compensation, comprehensive health benefits, and transition to full-time tenure.", "posted": false}, {"name": "Association of Contracted Teachers in Public Primary Education in Lebanon رابطة الأساتذة المتعاقدين في التعليم الأساسي الرسمي في لبنان", "verticals": ["Tutors"], "link": "https://www.facebook.com/ctlpteacher/?locale=ar_AR", "followers": null, "contacted": true, "adminName": "Nisreen Chahine", "phone": "03 818 017", "email": "chahinenisrine7@gmail.com", "status": "Send Additional Information", "area": "Beirut, Lebanon", "notes": "Organization that supports contracted teachers in Lebanon’s public basic education sector and advocates for their professional rights and job stability.", "posted": false}, {"name": "Committee of Contracted Secondary Teachers in Public Education in Lebanon لجنة الأساتذة المتعاقدين في التعليم الثانوي الرسمي في لبنان", "verticals": ["Tutors"], "link": "https://www.facebook.com/groups/220912311445407/about", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "status": "", "area": "Lebanon", "notes": "A group that represents contracted secondary school teachers in Lebanon’s public education system and advocates for their rights and working conditions.", "posted": false}, {"name": "Order of Nurses in Lebanon نقابة الممرضات والممرضين في لبنان", "verticals": ["Nurses"], "link": "Order of Nurses Lebanon", "followers": null, "contacted": true, "adminName": "Nathalie Richa", "phone": "01 495 774", "email": "info@orderofnurses.org.lb", "status": "Closed", "area": "Sin el Fil, Beirut hall, Pierre Amin el Gemayel boulevard", "notes": "The official regulatory body for nurses in Lebanon that licenses professionals, sets ethical and practice standards, and supports the development of the nursing profession and healthcare quality.", "posted": false}, {"name": "Professional Artists Syndicate in Lebanon نقابة الفنانين المحترفين في لبنان", "verticals": ["Music and Art Instructors"], "link": "https://www.facebook.com/alfananinepro/?locale=ar_AR", "followers": null, "contacted": true, "adminName": "Abdo Mounzer", "phone": "03 831 839", "email": "Alfananinepro@gmail.com", "status": "Closed", "area": "Horsh Tabet, Sin El Fil, Lebanon", "notes": "Professional organization that represents and supports artists in Lebanon by protecting their rights and promoting artistic and cultural work.", "posted": false}, {"name": "Register of Exercise Professionals REPs سجلّ محترفي التمارين الرياضية", "verticals": ["Sport Coaches and Trainers"], "link": "REPs LEBANON", "followers": null, "contacted": true, "adminName": "Naima Kaseer", "phone": "70 889 228", "email": "info@repslebanon.com", "status": "Freelancer Application Communication Sent", "area": "Lebanon - Baabda - Marwan Charbel Street - Hilal building", "notes": "Goal is to elevate the quality and expertise within the fitness sector by ensuring that professionals are equipped with the right skills and certifications to deliver safe and effective training that supports health and wellness.", "posted": false}, {"name": "The Syndicate of Yoga Teachers نقابة مدرّسي اليوغا", "verticals": ["Sport Coaches and Trainers"], "link": "Syndicate of The Yoga Teachers in Lebanon", "followers": null, "contacted": true, "adminName": "Carla Feghali Carole Hayek", "phone": "03 828 478 03 748 686", "email": "info@yoga-lb.com", "status": "Send Additional Information", "area": "Lebanon", "notes": "The official professional body for yoga teachers in Lebanon, established to promote ethical standards, qualified instruction, professional recognition, and the development of yoga education and practice.", "posted": false}, {"name": "Lebanese Order of Physiotherapists نقابة المعالجين الفيزيائيين في لبنان", "verticals": ["Home-Based Therapists"], "link": "Lebanese Order of Physiotherapists", "followers": null, "contacted": true, "adminName": "Dr Rami Chammas", "phone": "03 334 240", "email": "director.nip@lopt-lb.org coordinator@lopt-lb.org", "status": "Send Additional Information", "area": "1th Street, Adnan Halabi Building - 5th floor, Dekwaneh, Lebanon", "notes": "Supporting a community that advances the profession of physiotherapy by adopting the latest technologies in the field, and embracing evidence-based practice to improve the health, wellness, and quality of life of the Lebanese society.", "posted": false}, {"name": "The Lebanese Occupational Therapists Syndicate الجمعية اللبنانية للمعالجين الوظيفيين", "verticals": ["Home-Based Therapists"], "link": "https://www.lotslb.org/", "followers": null, "contacted": true, "adminName": "Dina Hasbini Yahfoufi Doha", "phone": "76 880 392", "email": "info@lotslb.org lots.lebanon@gmail.com", "status": "Send Additional Information", "area": "1st Floor, Lebanon145 Habib Basha El Saad Street, Achrafieh, Beirut", "notes": "We are a local network representing occupational therapists in Lebanon. We strive to promote the profession within the community and raise awareness about it, as well as to enhance the excellence of occupational therapists seeking to improve their practice.", "posted": false}, {"name": "Social Workers' Syndicate in Lebanon نقابة الأخصائيين الاجتماعيين في لبنان", "verticals": ["General / Other"], "link": "Social Workers – Syndicate In Lebanon", "followers": null, "contacted": true, "adminName": "Mrs. Nadia Badran Mrs. Rajaa Chatila", "phone": "70 279 584", "email": "info@swslb.com social.workers.syndicate.leb@gmail.com support@socialworkerslb.com", "status": "FUP Call", "area": "National Council for Social Service in Lebanon, Building N:97, 2nd Floor, Above Bank Byblos, Badaro Str., Beirut, Lebanon", "notes": "The professional body representing social workers in Lebanon, promoting ethical practice, professional rights, community services, and social welfare support.", "posted": false}, {"name": "Syndicate of Actors", "verticals": ["Music and Art Instructors"], "link": "https://www.lebaneseactors.net/", "followers": null, "contacted": true, "adminName": "Mr. Nehme Badawi", "phone": "01 383 407", "email": "info@lebaneseactors.com", "status": "Send Freelancer Application Communication", "area": "Horch Kfouri, Badaro Street, Beirut, Lebanon.", "notes": "Actors, singers, dancers, presenters, magicians", "posted": false}, {"name": "Lebanese Veterinary Syndicate نقابة الاطباء البيطريين لبنان", "verticals": ["Pet Services"], "link": "Lebanese Veterinary Syndicate", "followers": null, "contacted": true, "adminName": "Dr. Ihab Chaaban", "phone": "03 818 245", "email": "info.lvs.gov@gmail.com", "status": "No Answer, FUP", "area": "Sin El Fil", "notes": "The official professional body representing licensed veterinarians in Lebanon, organizing elections, public health initiatives like rabies vaccination campaigns, and engaging with national and regional authorities on behalf of the veterinary profession.", "posted": false}, {"name": "Syndicat des Musiciens et Chanteurs Professionnels au Liban (SMCPL)", "verticals": ["Music and Art Instructors"], "link": "SMCPL", "followers": null, "contacted": null, "adminName": "", "phone": "01 510 091 01 510 096", "email": "", "status": "", "area": "Sin el Fil", "notes": "", "posted": false}, {"name": "‎نقابة أصحاب صالونات التزيين النسائي في لبنان‎", "verticals": ["General / Other"], "link": "‎نقابة أصحاب صالونات التزيين النسائي في لبنان‎ (@Association.Beauty.Lebanon) • Facebook", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "رابطة الأساتذة المتعاقدين في التعليم الأساسي الرسمي في لبنان", "verticals": ["General / Other"], "link": "رابطة الأساتذة المتعاقدين في التعليم الأساسي الرسمي في لبنان | Beirut", "followers": null, "contacted": null, "adminName": "Chahine Nisreen", "phone": "03 818 017", "email": "", "status": "", "area": "", "notes": "", "posted": false}, {"name": "Committee of Contract Teachers in Official Vocational and Technical Education - Lebanon", "verticals": ["General / Other"], "link": "https://www.facebook.com/groups/329387053746217/files/files", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "status": "", "area": "", "notes": "", "posted": false}];
+
+  SourceTypePage.init({
+    entities: SYNDICATES_ENTITIES,
+    sourceType: "Syndicates",
+    icon: "shield",
+    hasReach: false,
+    sortDefault: "nameAsc",
+    kpi3: {
+      label: "Fully Documented",
+      icon: "check",
+      substitute: true,
+      tooltip: "No literal \u201cApproved\u201d status exists for Syndicates yet \u2014 shown instead: syndicates with both a named contact and a phone number on file.",
+      compute: (rows) => rows.filter((e) => e.adminName && e.phone).length,
+    },
+    kpi4: {
+      label: "In Active Follow-Up",
+      icon: "clock",
+      substitute: true,
+      tooltip: "No \u201cposted\u201d step applies to Syndicates \u2014 shown instead: syndicates where additional information, a communication packet, or a follow-up call is already in motion.",
+      compute: (rows) => rows.filter((e) => /fup|send|communication/i.test(e.status || "")).length,
+    },
+    vboxExtra: {
+      label: "Documented",
+      compute: (list) => list.filter((e) => e.adminName && e.phone).length,
+    },
+  });
+
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    AppShell.init({ current: "sources-syndicates", root: ".." });
+  }
+</script>
+
+</body>
+</html>

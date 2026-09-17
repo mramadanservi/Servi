@@ -38,7 +38,7 @@
   <section class="ov-card leads-filter-card" id="callsFilterCard" hidden>
     <div class="ov-card-header">
       <h2 data-i18n="Filter">Filter</h2>
-      <span class="ov-hint">Applies to the KPI row, Follow-Up list, and Top Callers below — never All Verticals</span>
+      <span class="ov-hint">Applies to the KPI row, Follow-Up list, and Top Callers below — never All Verticals. A Custom Range also drives Calls Over Time.</span>
     </div>
     <div class="leads-filter-bar">
       <div class="leads-filter-presets" id="callsDatePresets">
@@ -76,13 +76,14 @@
       <section class="ov-card" id="callsChartCard" hidden>
         <div class="ov-card-header">
           <h2>Calls Over Time</h2>
-          <span class="ov-hint">Last 30 days &middot; district/vertical/called by filters apply, date preset doesn't</span>
+          <span class="ov-hint">30-day window, or your Custom Range if one's applied &middot; drag the slider below to look further back &middot; district/vertical/called by filters apply, other date presets don't</span>
         </div>
         <div class="chart-summary">
           <span class="chart-summary-value" id="callsChartTotal">0</span>
           <span class="chart-summary-label" id="callsChartAvg">0/day avg</span>
         </div>
         <div class="chart-wrap" id="callsChart"></div>
+        <div id="callsChartTimeline"></div>
       </section>
 
       <section class="ov-card leads-table-card" id="callsFollowUpCard" hidden>
@@ -176,6 +177,7 @@
 <script src="../shared/team.js"></script>
 <script src="../shared/chartSettings.js"></script>
 <script src="../shared/chart.js"></script>
+<script src="../shared/timelineSlider.js"></script>
 <script src="../shared/i18n.js"></script>
 <script src="../shared/sidebar.js"></script>
 <script>
@@ -186,7 +188,66 @@
 
     wireFilterBar();
     wireGauge();
+    wireChartTimeline();
     loadCallsData();
+  }
+
+  /* ---------------- Calls Over Time timeline slider ----------------
+     Lets the chart's 30-day window pan across the entire call history
+     instead of always ending today — see shared/timelineSlider.js.
+     Bounded by the earliest ACTUAL call (dateContacted + calledBy), the
+     same records the chart itself counts, computed unfiltered so the
+     slider's range doesn't jump around as the filter bar changes.
+
+     The Custom Range date filter (below) takes over this timeline
+     instead of running alongside it: while a custom range is applied,
+     the chart shows exactly that range (not a fixed 30 days) and the
+     slider shows a locked, non-draggable summary of it — "Jump to
+     today" clears the custom range and hands control back to the drag
+     slider. See isCustomRangeActive()/renderChart(). */
+
+  let callsChartEndAnchor = new Date();
+  let callsTimelineSlider = null;
+
+  function earliestCallDate() {
+    const withCalls = DataStore.getAllRecords().filter((r) => r.dateContacted && r.calledBy);
+    if (!withCalls.length) return null;
+    return withCalls.reduce((min, r) => (r.dateContacted < min ? r.dateContacted : min), withCalls[0].dateContacted);
+  }
+
+  function isCustomRangeActive() {
+    return callsFilters.preset === "custom" && !!callsFilters.customStart && !!callsFilters.customEnd;
+  }
+
+  function fmtShort(d) {
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  function wireChartTimeline() {
+    callsTimelineSlider = TimelineSlider.attach(document.getElementById("callsChartTimeline"), {
+      getEarliestDate: earliestCallDate,
+      windowDays: 30,
+      onChange: (endAnchor) => {
+        callsChartEndAnchor = endAnchor;
+        renderChart();
+      },
+      isLocked: isCustomRangeActive,
+      lockedLabel: () => `${fmtShort(callsFilters.customStart)} – ${fmtShort(callsFilters.customEnd)}`,
+      onUnlock: clearCustomRange,
+    });
+  }
+
+  // Shared by the slider's "Jump to today" (while locked) and could be
+  // reused anywhere else that needs to drop back to the default 30-day
+  // view — mirrors exactly what the plain preset buttons already do to
+  // callsFilters.preset/customStart/customEnd.
+  function clearCustomRange() {
+    callsFilters.preset = "all";
+    callsFilters.customStart = null;
+    callsFilters.customEnd = null;
+    document.getElementById("callsCustomRangeBtn").textContent = "Custom Range";
+    document.querySelectorAll("#callsDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
+    renderCallsFiltered();
   }
 
   /* ============================================================
@@ -329,6 +390,10 @@
       callsFilters.customEnd = null;
       document.querySelectorAll("#callsDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
       renderCallsFiltered();
+      // Only matters if a Custom Range was active before this click — leaving
+      // it un-locks the Calls Over Time timeline back to the drag slider.
+      renderChart();
+      if (callsTimelineSlider) callsTimelineSlider.refresh();
     });
     DateRangePicker.attach(document.getElementById("callsCustomRangeBtn"), {
       getInitial: () => ({ start: callsFilters.customStart, end: callsFilters.customEnd }),
@@ -340,6 +405,10 @@
         btn.textContent = `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
         document.querySelectorAll("#callsDatePresets button").forEach((b) => b.classList.toggle("active", b === btn));
         renderCallsFiltered();
+        // Custom Range now drives the Calls Over Time chart/timeline too —
+        // see isCustomRangeActive()/renderChart().
+        renderChart();
+        if (callsTimelineSlider) callsTimelineSlider.refresh();
       },
       onClear: () => {
         callsFilters.preset = "all";
@@ -349,6 +418,8 @@
         btn.textContent = "Custom Range";
         document.querySelectorAll("#callsDatePresets button").forEach((b) => b.classList.toggle("active", b.dataset.preset === "all"));
         renderCallsFiltered();
+        renderChart();
+        if (callsTimelineSlider) callsTimelineSlider.refresh();
       },
     });
     document.getElementById("callsDistrictSelect").addEventListener("change", (e) => {
@@ -387,6 +458,7 @@
       document.getElementById("callsCalledBySelect").value = "";
       renderCallsFiltered();
       renderChart();
+      if (callsTimelineSlider) callsTimelineSlider.refresh();
     });
   }
 
@@ -396,6 +468,7 @@
 
   function renderCallsAll() {
     renderVerticalGridPanel(); // unfiltered — all-time calls made per vertical
+    if (callsTimelineSlider) callsTimelineSlider.refresh(); // pick up the freshly-loaded data's earliest call date
     renderChart();
     renderGauge(); // unfiltered — all-time conversion rate
     renderCallsFiltered(); // KPI row + follow-up list + top callers, respects the filter bar
@@ -502,11 +575,18 @@
 
   function renderChart() {
     const records = getFilteredCallsRecordsForChart();
-    const series = DataStore.timeSeries(records, "daily", (r) => !!r.calledBy, 30);
+    let series;
+    if (isCustomRangeActive()) {
+      const { addDays, startOfDay } = DataStore._dateHelpers;
+      const dayCount = Math.round((startOfDay(callsFilters.customEnd) - startOfDay(callsFilters.customStart)) / 86400000) + 1;
+      series = DataStore.timeSeries(records, "daily", (r) => !!r.calledBy, dayCount, callsFilters.customEnd);
+    } else {
+      series = DataStore.timeSeries(records, "daily", (r) => !!r.calledBy, 30, callsChartEndAnchor);
+    }
     const total = series.reduce((s, p) => s + p.count, 0);
     const avg = series.length ? Math.round((total / series.length) * 10) / 10 : 0;
     document.getElementById("callsChartTotal").textContent = total.toLocaleString();
-    document.getElementById("callsChartAvg").textContent = `${avg}/day avg over 30 days`;
+    document.getElementById("callsChartAvg").textContent = `${avg}/day avg over ${series.length} day${series.length === 1 ? "" : "s"}`;
     Chart.render(document.getElementById("callsChart"), series, { tone: "primary" });
   }
 

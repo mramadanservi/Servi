@@ -112,7 +112,31 @@ a { color: inherit; }
 .app-sidebar.collapsed .app-sidebar-brand img { display: none; }
 .app-sidebar.collapsed .app-sidebar-toggle { margin-left: 0; }
 
-.app-sidebar-groups { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 18px; }
+.app-sidebar-groups { padding: 12px 10px; display: flex; flex-direction: column; gap: 18px; }
+
+/* ---- Sources sub-nav: sliding two-panel track ---- */
+/* The sidebar itself still owns scrolling (.app-sidebar has overflow-y:
+   auto on the whole column) — this viewport only needs to clip the
+   double-wide track horizontally so the inactive panel doesn't peek out
+   to the side. */
+.app-sidebar-viewport { overflow: hidden; width: 100%; }
+.app-sidebar-track { display: flex; width: 200%; transition: transform 0.28s ease; }
+.app-sidebar-track.show-sources { transform: translateX(-50%); }
+/* Used only on first paint when a Sources page loads already showing its
+   sub-nav — without this, the track would visibly animate in on every
+   single page load within the section, which reads as a glitch rather
+   than a transition (the slide should only play when you actually
+   arrive FROM elsewhere). Removed by JS a tick after mount. */
+.app-sidebar-track.no-anim { transition: none; }
+.app-sidebar-panel { width: 50%; flex-shrink: 0; min-width: 0; }
+
+.app-sidebar-back {
+  display: flex; align-items: center; gap: 6px; width: calc(100% - 20px); margin: 4px 10px 10px;
+  border: none; background: transparent; color: var(--text-muted); font: inherit; font-size: 12.5px; font-weight: 700;
+  padding: 8px 8px; border-radius: 8px; cursor: pointer; text-align: left;
+}
+.app-sidebar-back:hover { background: var(--surface-alt); color: var(--text); }
+.app-sidebar.collapsed .app-sidebar-back span { display: none; }
 
 .app-sidebar-group-title {
   font-size: 11px;
@@ -125,6 +149,22 @@ a { color: inherit; }
 .app-sidebar.collapsed .app-sidebar-group-title { display: none; }
 
 .app-sidebar-group-items { display: flex; flex-direction: column; gap: 2px; }
+
+/* ---- Sources sub-nav: collapsible "Verticals" / "Sources" groups ---- */
+.app-sidebar-navgroup { margin-top: 4px; }
+.app-sidebar-navgroup-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  border: none; background: transparent; cursor: pointer; font: inherit;
+  color: var(--text-muted); font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 8px 10px 6px; border-radius: 8px;
+}
+.app-sidebar-navgroup-header:hover { color: var(--text); background: var(--surface-alt); }
+.app-sidebar-navgroup-chevron { display: flex; align-items: center; flex-shrink: 0; transition: transform 0.18s ease; }
+.app-sidebar-navgroup.collapsed .app-sidebar-navgroup-chevron { transform: rotate(-90deg); }
+.app-sidebar-navgroup-items { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.app-sidebar-navgroup.collapsed .app-sidebar-navgroup-items { display: none; }
+.app-sidebar.collapsed .app-sidebar-navgroup-header span:first-child { display: none; }
+.app-sidebar.collapsed .app-sidebar-navgroup-header { justify-content: center; }
 
 .app-nav-item {
   display: flex;
@@ -648,6 +688,14 @@ a { color: inherit; }
 
 .ov-kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .ov-kpi-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
+/* Sources > source-type pages' 5-card header (Total / Contacted / Approved
+   (or substitute) / Posted (or substitute) / Top vertical) — see
+   shared/sourceTypePage.js. */
+.ov-kpi-row.cols-5 { grid-template-columns: repeat(5, 1fr); }
+/* Leads page: just the one all-time total card now (see leads.html) —
+   left at a fixed card-like width instead of stretching a single tile
+   across the full row. */
+.ov-kpi-row.cols-1 { grid-template-columns: minmax(0, 280px); }
 .ov-kpi-card {
   border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow);
   padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; color: #fff;
@@ -673,6 +721,16 @@ a { color: inherit; }
 .ov-kpi-trend.down { color: var(--bad); background: rgba(255, 255, 255, 0.92); }
 .ov-kpi-trend.flat { color: var(--text-muted); background: rgba(255, 255, 255, 0.92); }
 .ov-kpi-trend svg { flex-shrink: 0; }
+
+/* Small inline marker on a Sources > source-type KPI card whose metric is a
+   real-but-substitute stand-in for "Approved"/"Posted" (see
+   shared/sourceTypePage.js) — replaces a whole separate explainer
+   paragraph that used to sit under the KPI row on every one of those
+   pages; the full explanation is still one hover away via the card's own
+   tooltip. */
+.src-kpi-substitute-mark {
+  display: inline-block; opacity: 0.85; cursor: help; font-weight: 800;
+}
 
 /* Bigger, more visible trend badge for the Leads/Calls/Applied KPI rows —
    same up/down/flat logic and colors as the compact Overview version above,
@@ -773,6 +831,27 @@ a { color: inherit; }
   .side-vertical-grid .ov-vertical-box { padding: 8px 6px; }
 }
 
+/* Bookings' own per-vertical average grid (#bkVerticalGrid, via
+   renderVerticalGrid() in bookings.html) — 2 columns instead of the 3
+   every other side-rail "All Verticals" panel above uses, so all 9
+   verticals get noticeably bigger boxes (5 rows, last row half-empty)
+   per request. Scoped to .bk-vertical-grid specifically (an extra class
+   on that one grid) so Leads/Applied/Calls's shared 3-column
+   .side-vertical-grid rule above is untouched. */
+.bk-avg-toggle { margin-bottom: 12px; }
+.side-vertical-grid.bk-vertical-grid.ov-vertical-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.bk-vertical-grid .ov-vertical-box { padding: 16px 14px; }
+.bk-vertical-grid .ov-vertical-box-head { gap: 8px; margin-bottom: 8px; }
+.bk-vertical-grid .ov-vertical-box-icon { width: 26px; height: 26px; border-radius: 9px; }
+.bk-vertical-grid .ov-vertical-box-label { font-size: 13px; }
+.bk-vertical-grid .ov-vertical-box-count { font-size: 24px; }
+.bk-vertical-grid .ov-vertical-box-count-label { font-size: 11px; }
+.bk-vertical-grid .bk-vbox-secondary { font-size: 11px; margin-top: 3px; }
+@media (max-width: 480px) {
+  .side-vertical-grid.bk-vertical-grid.ov-vertical-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .bk-vertical-grid .ov-vertical-box { padding: 12px 10px; }
+}
+
 /* The single vertical with the most total leads — a highlight so it reads
    at a glance, not just from the numbers. */
 .ov-vertical-box.top-vertical {
@@ -787,9 +866,11 @@ a { color: inherit; }
   .ov-layout { grid-template-columns: 1fr; }
   .ov-kpi-row { grid-template-columns: 1fr; }
   .ov-kpi-row.cols-4 { grid-template-columns: repeat(2, 1fr); }
+  .ov-kpi-row.cols-5 { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 560px) {
   .ov-kpi-row.cols-4 { grid-template-columns: 1fr; }
+  .ov-kpi-row.cols-5 { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 720px) {
   .ov-vertical-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -862,6 +943,132 @@ a { color: inherit; }
 .ov-insight-text strong { font-weight: 800; }
 .ov-insight-tone-red .ov-insight-icon { background: rgba(214, 69, 69, 0.12); color: var(--bad); }
 .ov-insight-tone-green .ov-insight-icon { background: rgba(26, 158, 107, 0.12); color: var(--good); }
+/* Amber tone — added for Sources' "moderate coverage" insights, same
+   amber used for the "Low coverage" flag in the Facebook Groups Apps
+   Script analytics tab (#e8a33d), so the two live somewhat consistently
+   even though one's a Sheet and one's this dashboard. */
+.ov-insight-tone-amber .ov-insight-icon { background: rgba(232, 163, 61, 0.16); color: #b9791f; }
+
+/* A clear, plain banner saying "this is a snapshot, not live yet" — same
+   spirit as the existing PLACEHOLDER DATA NOTICE convention used for the
+   General Chatroom preview, just visible on the page instead of only in
+   a code comment, since this one directly affects how much to trust the
+   numbers below it. */
+.src-notice {
+  display: flex; align-items: flex-start; gap: 10px; background: var(--surface-alt);
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px;
+  font-size: 12.5px; line-height: 1.5; color: var(--text-muted); margin-bottom: 18px;
+}
+.src-notice strong { color: var(--text); }
+.src-notice-icon { color: var(--primary); flex-shrink: 0; margin-top: 1px; }
+/* Slimmer variant for the 6 Sources > source-type pages, which already
+   carry a 5-card KPI row, a 3x3 vertical-coverage grid, a chart and AI
+   Insights below this — the full-size .src-notice reads as one clutter
+   layer too many stacked on top of all that, so this cuts font-size/
+   padding/margin down without losing the actual notice text. */
+.src-notice.src-notice-compact { font-size: 11.5px; padding: 8px 12px; margin-bottom: 14px; gap: 8px; }
+
+/* A lighter-weight, un-bordered cousin of .src-notice — used for the
+   "here's what these numbers actually mean" plain-language explanations
+   sprinkled through the Sources pages, right under a card's header
+   rather than at the very top of the page. Same info tone, smaller and
+   quieter since it's a clarification, not a caveat. */
+.src-explainer {
+  display: flex; align-items: flex-start; gap: 8px; color: var(--text-muted);
+  font-size: 12px; line-height: 1.55; margin-bottom: 12px;
+}
+.src-explainer strong { color: var(--text); }
+.src-explainer-icon { color: var(--primary); flex-shrink: 0; margin-top: 1px; opacity: 0.85; }
+
+/* ---- Tutors sources table: notes/link cell ---- */
+.tut-notes-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); font-size: 12px; }
+.tut-notes-cell a { color: var(--primary); display: inline-flex; vertical-align: middle; margin-right: 4px; }
+.tut-notes-cell a:hover { opacity: 0.75; }
+
+/* Coverage-tier accent on the per-vertical grid boxes (reuses
+   .ov-vertical-box from the shared vertical-grid component) — a left
+   accent bar rather than changing the whole card background, so all 10
+   boxes (9 verticals + General/Other) stay visually calm as a set while
+   still flagging which ones need attention at a glance. */
+.ov-vertical-box.src-tone-focus { border-left: 3px solid var(--bad); }
+.ov-vertical-box.src-tone-moderate { border-left: 3px solid #e8a33d; }
+.ov-vertical-box.src-tone-strong { border-left: 3px solid var(--good); }
+.ov-vertical-box.src-tone-neutral { border-left: 3px solid var(--border); }
+.src-coverage-pill {
+  display: inline-block; font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 2px 7px; border-radius: 999px; margin-top: 4px;
+}
+.src-tone-focus .src-coverage-pill { background: rgba(214, 69, 69, 0.12); color: var(--bad); }
+.src-tone-moderate .src-coverage-pill { background: rgba(232, 163, 61, 0.16); color: #b9791f; }
+.src-tone-strong .src-coverage-pill { background: rgba(26, 158, 107, 0.12); color: var(--good); }
+.src-tone-neutral .src-coverage-pill { background: var(--surface-alt); color: var(--text-muted); }
+
+/* ---- Source-type pages (Facebook Groups, Academies, Syndicates,
+   Freelancer Platforms, Tutoring Centers, Nursing Schools) — big, clearly-
+   bordered per-vertical coverage boxes, 3x3, in the wide main column.
+   Deliberately a bigger, louder sibling of .ov-vertical-box/.ov-vertical-
+   grid above (which is tuned for a narrow ~400px side column) rather than
+   a reuse of it — per explicit request for "big, visible, clear... clear
+   borders, big numbers and fonts" boxes living in the MAIN column instead.
+   Same design language as the rest of the dashboard (.ov-card's border/
+   radius/shadow tokens, the existing coverage-tier accent colors) so it
+   still reads as one product, just sized for its new home. See
+   shared/sourceTypePage.js for what fills these in. */
+.src-vbox-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.src-vbox {
+  background: var(--surface); border: 1.5px solid var(--border-strong); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); padding: 16px 16px 14px; min-width: 0;
+  border-left-width: 4px;
+}
+.src-vbox.src-tone-focus { border-left-color: var(--bad); }
+.src-vbox.src-tone-moderate { border-left-color: #e8a33d; }
+.src-vbox.src-tone-strong { border-left-color: var(--good); }
+.src-vbox-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; min-width: 0; }
+.src-vbox-icon {
+  width: 34px; height: 34px; border-radius: 10px; background: var(--surface-alt); color: var(--primary);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.src-vbox-headtext { min-width: 0; flex: 1; }
+.src-vbox-label { font-size: 14px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-vbox-count-row { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 12px; }
+.src-vbox-count { font-size: 34px; font-weight: 800; line-height: 1; color: var(--text); }
+.src-vbox-count-label { font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.src-vbox-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.src-vbox-stat { min-width: 0; }
+.src-vbox-stat-value { font-size: 17px; font-weight: 800; line-height: 1.1; color: var(--text); }
+.src-vbox-stat-value.tone-good { color: var(--good); }
+.src-vbox-stat-value.tone-bad { color: var(--bad); }
+/* Deliberately allowed to wrap onto 2 lines instead of the single-line
+   ellipsis truncation this used to have — at ~90px per column, "Not
+   contacted"/"% contacted" truncated to "NOT CONTA…"/"% CONTACT…", which
+   read as broken/unclear rather than just tight. Wrapping keeps every word
+   fully readable at the cost of a slightly taller stat row. */
+/* Normal case, not uppercase — uppercase made "CONTACTED"/"NOT CONTACTED"
+   wide enough that the single word "CONTACTED" itself didn't fit an ~70px
+   column and got hyphen-less split mid-word ("CONTACTE" / "D"). Sentence
+   case wraps cleanly at the space between words instead. */
+.src-vbox-stat-label { font-size: 10px; font-weight: 700; color: var(--text-muted); white-space: normal; line-height: 1.3; overflow-wrap: break-word; margin-top: 2px; }
+.src-vbox-extra { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.src-vbox-extra-value { font-size: 15px; font-weight: 800; }
+.src-vbox-extra-label { font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.02em; }
+
+@media (max-width: 1180px) {
+  .src-vbox-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .src-vbox-grid { grid-template-columns: 1fr; }
+  .src-vbox-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ---- Sources page: source-type list (right column) ---- */
+.src-type-list { display: flex; flex-direction: column; gap: 2px; }
+.src-type-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.src-type-row:last-child { border-bottom: none; }
+.src-type-name { font-size: 12.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.src-type-count { font-size: 13px; font-weight: 800; }
+.src-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; opacity: 0.5; }
+.src-status-dot.live { background: var(--good); opacity: 1; }
+.src-type-status { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.02em; }
 
 /* ---- team / top callers list ---- */
 
@@ -1057,6 +1264,51 @@ a { color: inherit; }
 .chart-summary-value { font-size: 30px; font-weight: 800; line-height: 1; color: var(--text); }
 .chart-summary-label { font-size: 12.5px; color: var(--text-muted); font-weight: 700; }
 .chart-wrap { position: relative; }
+
+/* ============================================================
+   TimelineSlider (shared/timelineSlider.js)
+   ------------------------------------------------------------
+   Sits directly under a chart's .chart-wrap — lets the fixed-size
+   window (30 days) pan across the record set's whole history instead
+   of always ending "today."
+   ============================================================ */
+.ts-wrap { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ts-wrap.ts-disabled { opacity: 0.5; }
+.ts-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.ts-range-label { font-size: 12.5px; font-weight: 800; color: var(--text); }
+.ts-today-btn {
+  border: 1.5px solid var(--border-strong); background: var(--surface-alt); color: var(--text-muted); font: inherit;
+  font-size: 11.5px; font-weight: 800; padding: 5px 11px; border-radius: 9px; cursor: pointer; transition: all 0.12s ease;
+}
+.ts-today-btn:hover:not(:disabled) { color: var(--primary); border-color: var(--primary); }
+.ts-today-btn:disabled { cursor: default; opacity: 0.45; }
+
+.ts-range {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 999px;
+  background: var(--border-strong); outline: none; cursor: pointer; margin: 4px 0;
+  /* Mirrors the track so min (0 days back = "Today") sits on the RIGHT and
+     max (earliest date) sits on the LEFT — matching the endpoints row below
+     and the chart above (oldest on the left, today on the right). Without
+     this, a plain input[type=range] puts "Today" at the left end, which
+     directly contradicted the "Today" caption sitting under the right end. */
+  direction: rtl;
+}
+.ts-range:disabled { cursor: default; }
+.ts-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 17px; height: 17px; border-radius: 50%;
+  background: var(--primary); border: 2px solid var(--surface); box-shadow: var(--shadow); cursor: pointer;
+}
+.ts-range::-moz-range-thumb {
+  width: 17px; height: 17px; border-radius: 50%; background: var(--primary); border: 2px solid var(--surface);
+  box-shadow: var(--shadow); cursor: pointer;
+}
+.ts-range::-moz-range-track { background: var(--border-strong); height: 6px; border-radius: 999px; }
+.ts-endpoints { display: flex; align-items: center; justify-content: space-between; font-size: 10.5px; font-weight: 700; color: var(--text-muted); margin-top: 4px; }
+/* Locked state — a Custom Range date filter is driving the chart's window
+   instead of the drag slider (see timelineSlider.js's isLocked/lockedLabel/
+   onUnlock). "Jump to today" here clears that custom range and hands control
+   back to the normal 30-day drag slider. */
+.ts-locked-hint { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-top: 2px; }
 .chart-svg { display: block; overflow: visible; }
 .chart-gridline { stroke: var(--border); stroke-width: 1; }
 .chart-axis-label { fill: var(--text-muted); font-size: 10px; font-family: inherit; }
@@ -2284,6 +2536,56 @@ a { color: inherit; }
 .drp-btn-primary:hover { background: var(--primary-dark); }
 
 /* ============================================================
+   MultiSelect (shared/multiSelect.js)
+   ------------------------------------------------------------
+   Same look-and-feel as .leads-select-wrap (the plain single
+   <select> filters) so the two are indistinguishable at rest — the
+   difference only shows up once you open the popover. Footer
+   buttons reuse .drp-btn/.drp-btn-primary from DateRangePicker above
+   on purpose, so every popover in the app shares one button style.
+   ============================================================ */
+
+.ms-trigger-btn {
+  border: none; background: transparent; font: inherit; font-size: 13.5px; font-weight: 700; color: var(--text);
+  cursor: pointer; max-width: 170px; display: inline-flex; align-items: center; gap: 5px;
+}
+.ms-trigger-btn:focus { outline: none; }
+.ms-trigger-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-chevron { display: inline-flex; flex-shrink: 0; opacity: 0.55; transition: transform 0.12s ease; }
+.ms-trigger-btn.ms-trigger-open .ms-chevron { transform: rotate(180deg); }
+.leads-select-wrap.ms-active { border-color: var(--primary); }
+
+.ms-popover {
+  position: fixed; z-index: 200; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; box-shadow: var(--shadow-md); padding: 12px 0 12px; display: flex; flex-direction: column;
+  max-width: calc(100vw - 24px);
+}
+.ms-search { margin: 0 12px 8px; }
+.ms-search input {
+  width: 100%; box-sizing: border-box; border: 1.5px solid var(--border-strong); border-radius: 9px;
+  background: var(--surface-alt); padding: 7px 10px; font: inherit; font-size: 12.5px; color: var(--text);
+}
+.ms-search input:focus { outline: none; border-color: var(--primary); }
+.ms-select-all {
+  margin: 0 6px 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.ms-select-all .ms-option-label { font-weight: 800; }
+.ms-list { max-height: 220px; overflow-y: auto; padding: 0 6px; }
+.ms-option {
+  display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 9px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+.ms-option:hover { background: var(--surface-alt); }
+.ms-option input[type="checkbox"] { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+.ms-option-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-empty { padding: 16px 12px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
+.ms-actions {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px;
+  padding: 10px 14px 0; border-top: 1px solid var(--border);
+}
+.ms-actions-right { display: flex; gap: 8px; }
+
+/* ============================================================
    Applied — per-row download button
    ============================================================ */
 
@@ -2407,10 +2709,19 @@ a { color: inherit; }
    swap reuses DataStore.VERTICALS' existing 9 icons — no new icon set.
    ============================================================ */
 
-.bk-list { display: flex; flex-direction: column; gap: 16px; }
+/* Per request: cards read narrower — a responsive grid (2 up at this
+   page's normal main-column width, collapsing to 1 up as it narrows)
+   instead of one full-width card per row. Height/padding/font sizes
+   are back to their original values; only the card's WIDTH shrank. */
+.bk-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .bk-card {
-  background: var(--surface); border: 1.5px solid var(--border-strong); border-radius: var(--radius-lg);
+  /* Per request: a clearer, more defined border than the old thin
+     border-strong line — widened slightly and darkened toward --text
+     via color-mix so it stays legible in both light and dark themes
+     without a brand-new border token. */
+  background: var(--surface); border: 2px solid color-mix(in srgb, var(--border-strong) 78%, var(--text) 22%); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md); overflow: hidden; cursor: pointer; transition: box-shadow .12s ease, border-color .12s ease;
+  display: flex; flex-direction: column;
 }
 .bk-card:hover { border-color: var(--primary); box-shadow: 0 6px 20px rgba(38, 34, 32, 0.14); }
 .bk-card-top { display: grid; grid-template-columns: 1fr 1.15fr 1fr; min-height: 168px; }
@@ -2444,7 +2755,8 @@ a { color: inherit; }
 
 .bk-card-bottom {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
-  padding: 10px 16px; background: var(--surface-alt); border-top: 1px solid var(--border);
+  padding: 10px 16px; background: var(--surface-alt); border-top: 1.5px solid color-mix(in srgb, var(--border-strong) 78%, var(--text) 22%);
+  margin-top: auto;
 }
 .bk-status-pill {
   display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800;
@@ -2472,6 +2784,7 @@ a { color: inherit; }
 .bk-action-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 @media (max-width: 640px) {
+  .bk-list { grid-template-columns: 1fr; }
   .bk-card-top { grid-template-columns: 1fr; min-height: 0; }
   .bk-panel-center { order: -1; }
   .bk-action-btn.rebook { margin-left: 0; }

@@ -145,10 +145,17 @@ const DataStore = (() => {
   // `matchFn(rec)` narrows which records count in a bucket — e.g. only
   // ones with a call, or only ones classified "applied" — so the same
   // function drives both the Calls Over Time and Applied Over Time charts.
-  function timeSeries(records, granularity, matchFn, count) {
+  //
+  // `endAnchor` (new) lets a caller shift the whole window instead of it
+  // always ending "today" — this is what the draggable timeline slider on
+  // the Calls/Applied Over Time charts re-calls this with as the user pans
+  // across history. Defaults to `new Date()` so every existing call site
+  // (just calls.html, confirmed via grep) keeps its old "last N days/weeks/
+  // months ending today" behavior unchanged.
+  function timeSeries(records, granularity, matchFn, count, endAnchor) {
     const match = matchFn || ((r) => !!r.dateContacted && !!r.calledBy);
     const withDate = records.filter((r) => r.dateContacted && match(r));
-    const now = new Date();
+    const now = endAnchor || new Date();
     const buckets = [];
 
     if (granularity === "daily") {

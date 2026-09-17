@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Servi Dashboard — Sources — Tutors</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../shared/shell.css" />
+<script src="https://accounts.google.com/gsi/client"></script>
+</head>
+
+<body>
+
+<main id="pageBody" hidden>
+  <div class="ov-header-row">
+    <div>
+      <h1 class="page-heading">Tutors — Sources</h1>
+      <p class="page-subheading">Every Tutors-tagged source across Facebook Groups, Academies, Syndicates, Freelancer Platforms and Tutoring Centers — who they are, how to reach them, and who's next.</p>
+    </div>
+  </div>
+
+  <div class="src-notice">
+    <span class="src-notice-icon" id="tutSrcNoticeIcon"></span>
+    <span><strong>Snapshot data, not live yet.</strong> Computed from the 5 source lists that tag Tutors (Facebook Groups, Academies &amp; Institutions, Syndicates, Freelancer Platforms, Tutoring Centers) as of Sep 17, 2026. Once each is a connected live Google Sheet, this page reads them the same read-only way Leads and Applied already do.</span>
+  </div>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2>At a glance</h2>
+      <span class="ov-hint">Across all 5 source types that mention Tutors</span>
+    </div>
+    <div class="ov-kpi-row cols-4" id="tutKpiRow1"></div>
+  </section>
+
+  <section class="ov-card ov-leads-overview">
+    <div class="ov-card-header">
+      <h2 id="tutRow2Title">A closer look at the top source type</h2>
+      <span class="ov-hint" id="tutRow2Hint"></span>
+    </div>
+    <div class="ov-kpi-row cols-3" id="tutKpiRow2"></div>
+  </section>
+
+  <section class="ov-card leads-filter-card">
+    <div class="ov-card-header">
+      <h2>Filter &amp; sort</h2>
+      <span class="ov-hint">Applies to the list below</span>
+    </div>
+    <div class="leads-filter-bar">
+      <div class="leads-filter-selects">
+        <div class="leads-select-wrap">
+          <span class="leads-select-label">Source Type</span>
+          <button type="button" id="tutSourceTypeMs"></button>
+        </div>
+        <div class="leads-select-wrap">
+          <span class="leads-select-label">Contacted</span>
+          <button type="button" id="tutContactedMs"></button>
+        </div>
+        <div class="leads-select-wrap">
+          <span class="leads-select-label">Sort by</span>
+          <select id="tutSortSelect">
+            <option value="followersDesc">Followers (high to low)</option>
+            <option value="nameAsc">Name (A–Z)</option>
+            <option value="sourceType">Source type</option>
+            <option value="contactedFirst">Contacted first</option>
+            <option value="notContactedFirst">Not contacted first</option>
+          </select>
+        </div>
+        <button type="button" class="leads-clear-btn" id="tutClearFiltersBtn">Clear filters</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="leads-layout">
+    <div class="leads-main">
+      <section class="ov-card leads-table-card">
+        <div class="ov-card-header">
+          <h2>All Tutors sources</h2>
+          <span class="ov-hint" id="tutTableHint"></span>
+        </div>
+        <div class="leads-table-toolbar">
+          <label class="leads-search-wrap">
+            <span id="tutSearchIcon"></span>
+            <input type="text" id="tutTableSearch" placeholder="Search name, admin, phone…" />
+          </label>
+        </div>
+        <div class="leads-table-scroll">
+          <table class="leads-table" id="tutTable">
+            <thead>
+              <tr>
+                <th data-sort="sourceType">Source Type</th>
+                <th data-sort="name">Name</th>
+                <th data-sort="followers">Followers</th>
+                <th data-sort="adminName">Admin / Contact</th>
+                <th data-sort="phone">Phone</th>
+                <th data-sort="contacted">Contacted</th>
+                <th>Notes / Link</th>
+              </tr>
+            </thead>
+            <tbody id="tutTableBody"></tbody>
+          </table>
+        </div>
+        <div class="leads-table-pagination" id="tutTablePagination"></div>
+      </section>
+    </div>
+
+    <div class="leads-side">
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Outreach Progress</h2>
+          <span class="ov-hint">How much of each pool has actually been contacted</span>
+        </div>
+        <div class="ov-goals-grid" id="tutProgressRings"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header">
+          <h2>Top reach opportunities</h2>
+          <span class="ov-hint">Biggest Facebook Groups not yet marked contacted — one message here reaches the most people</span>
+        </div>
+        <div class="ov-followup-list" id="tutTopOpportunities"></div>
+      </section>
+
+      <section class="ov-card">
+        <div class="ov-card-header"><h2>AI Insights</h2></div>
+        <div id="tutInsights"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="../shared/authConfig.js"></script>
+<script src="../shared/auth.js"></script>
+<script src="../shared/theme.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notifications.js"></script>
+<script src="../shared/sheetsConfig.js"></script>
+<script src="../shared/sheetsClient.js"></script>
+<script src="../shared/calendar.js"></script>
+<script src="../shared/taskSheet.js"></script>
+<script src="../shared/dataStore.js"></script>
+<script src="../shared/multiSelect.js"></script>
+<script src="../shared/i18n.js"></script>
+<script src="../shared/sourcesData.js"></script>
+<script src="../shared/sidebar.js"></script>
+<script>
+  /* ============================================================
+     TUTORS_ENTITIES — snapshot dataset, not invented
+     ------------------------------------------------------------
+     Every row below was extracted from the real Excel exports of the
+     5 source lists that tag "Tutors": Facebook Groups' "List of
+     Groups" tab (Number of Followers/Admin Names/Contact Number/
+     Email Address/Contacted/Status), Academies & Institutions (main
+     tab + its Outreach Tracker tab for "Called"), Syndicates (main
+     tab + its Outreach Tracker tab for "Called"), Freelancer
+     Platforms ("Done?" as the contacted signal), and Tutoring
+     Centers (main tab + its own Outreach Tracker tab for "Called" —
+     100% Tutors by definition, so every row is included).
+
+     "contacted" is tri-state in the source data (true / false /
+     unknown) but every place on this page that shows a yes/no reads
+     it as `contacted === true`, i.e. only an explicit "Yes"/"Called"
+     counts — a blank tracker cell is treated the same as "not yet
+     contacted" rather than assumed done.
+
+     Once these 5 sources are connected as live Google Sheets, this
+     constant gets replaced by SheetsClient fetches the same way
+     fetchAll()/fetchApplied() work — nothing that reads
+     TUTORS_ENTITIES below needs to change.
+     ============================================================ */
+  const TUTORS_ENTITIES = [{"sourceType": "Facebook Groups", "name": "Beirut Tutors", "link": "Beirut Tutors | Facebook", "followers": 2200.0, "contacted": true, "adminName": "Marc Awad Fayez Yah Bucker Yahfoufi", "phone": "76/ 531 433", "email": "beirut.tutor@gmail.com", "area": "", "status": "FUP", "notes": "American University Tutors: professional tutoring focused on AUB and LAU coursework."}, {"sourceType": "Facebook Groups", "name": "English teachers of Lebanon", "link": "https://www.facebook.com/groups/1598116290439736/about", "followers": 2400.0, "contacted": true, "adminName": "Khalil Zahra", "phone": "", "email": "", "area": "", "status": "FUP", "notes": "A group for Lebanese English Teachers, where they post job opportunities and teachers' professional bios."}, {"sourceType": "Facebook Groups", "name": "Teachers of Lebanon - let's get connected here!", "link": "https://www.facebook.com/share/g/1D1GLSbuAG/?mibextid=wwXIfr", "followers": 5000.0, "contacted": null, "adminName": "Muhammad Asif Tima Baghdadi", "phone": "", "email": "", "area": "", "status": "", "notes": "Unmoderated group.Contains random posts."}, {"sourceType": "Facebook Groups", "name": "Teachers of Lebanon (17K)", "link": "https://www.facebook.com/share/g/1EjruQyh4H/?mibextid=wwXIfr", "followers": 17200.0, "contacted": null, "adminName": "Samer Sd", "phone": "", "email": "", "area": "", "status": "", "notes": "A group of teachers across Lebanon to share jobs, resources, and opportunities."}, {"sourceType": "Facebook Groups", "name": "المعلمون في لبنان", "link": "المعلمون في لبنان", "followers": 63100.0, "contacted": null, "adminName": "Hasan Trad", "phone": "", "email": "", "area": "", "status": "", "notes": "Private Group for teachers in Lebanon, for educational and academic affairs."}, {"sourceType": "Facebook Groups", "name": "Teachers of Lebanon", "link": "Teachers of Lebanon | Facebook", "followers": 64000.0, "contacted": true, "adminName": "Chadi E. El Chami Hady Skayem", "phone": "", "email": "", "area": "", "status": "Declined", "notes": "The Teachers of Lebanon Facebook group welcomes teachers to share classroom experience, training tips, and ideas"}, {"sourceType": "Facebook Groups", "name": "لجنة الاساتذة المتعاقدين", "link": "https://www.facebook.com/groups/329387053746217/files/files", "followers": 6000.0, "contacted": null, "adminName": "", "phone": "", "email": "", "area": "", "status": "", "notes": ""}, {"sourceType": "Facebook Groups", "name": "رابطة الأساتذة المتعاقدين في التعليم الأساسي الرسمي في لبنان", "link": "https://www.facebook.com/ctlpteacher/?locale=ar_AR", "followers": 21000.0, "contacted": null, "adminName": "", "phone": "", "email": "", "area": "", "status": "", "notes": ""}, {"sourceType": "Academies & Institutions", "name": "CIS", "link": "CIS College", "followers": null, "contacted": true, "adminName": "", "phone": "81 709 770", "email": "", "area": "Ghobeiry", "status": "FUP Call", "notes": "Called Hiba from CIS; she referred us to Career Services. FUP"}, {"sourceType": "Academies & Institutions", "name": "LAU ACE", "link": "Education and Inclusion LAU ACE", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "area": "", "status": "", "notes": ""}, {"sourceType": "Academies & Institutions", "name": "BLC", "link": "BLC - British Language Centre", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "area": "", "status": "", "notes": ""}, {"sourceType": "Academies & Institutions", "name": "XploreTEFL", "link": "TEFL", "followers": null, "contacted": null, "adminName": "", "phone": "", "email": "", "area": "", "status": "", "notes": ""}, {"sourceType": "Academies & Institutions", "name": "YWCA", "link": "YWCA", "followers": null, "contacted": null, "adminName": "", "phone": "01 374 256", "email": "", "area": "Beirut", "status": "", "notes": ""}, {"sourceType": "Academies & Institutions", "name": "International House World Organization", "link": "IH Beirut - International House World Organisation", "followers": null, "contacted": null, "adminName": "", "phone": "01 500 978", "email": "", "area": "Sin el Fil", "status": "", "notes": ""}, {"sourceType": "Syndicates", "name": "Teachers Syndicate of Lebanon (TSL) نقابة المعلّمين في لبنان", "link": "‎نقابة المعلمين في لبنان‎ (@nakabi.teachers) • Facebook", "followers": null, "contacted": true, "adminName": "Nehme Mahfoud", "phone": "01 614 666", "email": "nakabatmouaalimean@hotmail.com", "area": "Badaro, Romeo & Juliette Building, 4th floor, Beirut", "status": "Send Additional Information", "notes": "The Organization that represents private school teachers in Lebanon and advocates for their professional and social rights."}, {"sourceType": "Syndicates", "name": "League of Public Technical and Vocational Teachers (CETO) رابطة أساتذة التعليم المهني والتقني الرسمي", "link": "المديرية العامة للتعليم المهني والتقني", "followers": null, "contacted": true, "adminName": "Farouq Al-Haraka", "phone": "01 693 707", "email": "ceto-lb@hotmail.com", "area": "Dekwaneh, Beirut", "status": "No Answer, FUP", "notes": "Equips students with the specific practical skills, scientific theories, and hands-on experience needed for specialized trades and professions."}, {"sourceType": "Syndicates", "name": "Public Primary Schools Teachers League in Lebanon (PPSTLL) رابطة معلّمي التعليم الأساسي الرسمي في لبنان", "link": "PPSTLL", "followers": null, "contacted": true, "adminName": "Manal Hdaife", "phone": "01 803 496", "email": "teachersunionleb@gmail.com", "area": "UNESCO StreetBlock of Ministry of Culture near UNESCO palace, 2nd floor, Beirut", "status": "No Answer, FUP", "notes": "Represents full-time teachers in public primary and intermediate schools."}, {"sourceType": "Syndicates", "name": "League of Secondary Public School Teachers (LPESPL) رابطة أساتذة التعليم الثانوي الرسمي في لبنان", "link": "LPESPL - رابطة اساتذة التعليم الثانوي في لبنان - ArabO", "followers": null, "contacted": null, "adminName": "Hanna Gharib", "phone": "01 803 205", "email": "lpespl@gmail.com", "area": "Beirut", "status": "", "notes": "The cultural, social and educational association of official secondary teachers in Lebanon"}, {"sourceType": "Syndicates", "name": "EdTech Syndicate in Lebanon نقابة تكنولوجيا التعليم في لبنان", "link": "edtechsyndicate | Facebook | Linktree", "followers": null, "contacted": true, "adminName": "Dr. Rabih Baalbaki", "phone": "81 826 681", "email": "info@edtechs.org.lb", "area": "Sami EL Solh , Mozannar Plaza 2, 3rd floor , Beirut, Lebanon", "status": "No Answer, FUP", "notes": "Organization that aims to activate and modernize the educational technology profession in Lebanon."}, {"sourceType": "Syndicates", "name": "Syndicate of Special Education Teachers نقابة أساتذة التربية المختصة", "link": "https://www.facebook.com/orthopedagogue/about", "followers": null, "contacted": true, "adminName": "Dr. Asma Mjaes Azar", "phone": "03 485 877", "email": "info@orthopedagoguesliban.org", "area": "Jal El Dib, main highway, JR Center", "status": "No Answer, FUP", "notes": "Specialized education which evaluates and treats learning difficulties and disabilities"}, {"sourceType": "Syndicates", "name": "League of Full-Time Professors at the Lebanese University رابطة الأساتذة المتفرغين في الجامعة اللبنانية", "link": "Teaching Staff | Lebanese University", "followers": null, "contacted": true, "adminName": "Yehya Rabih", "phone": "03 557 670", "email": "ligueprofsul@yahoo.com", "area": "Building of the Central Administration of the Lebanese University, Museum, Beirut", "status": "Closed", "notes": "The official union representing the teaching staff of the Lebanese University."}, {"sourceType": "Syndicates", "name": "Committee of Contractual Teachers at the Lebanese University لجنة الأساتذة المتعاقدين في الجامعة اللبنانية", "link": "https://ul.edu.lb/en/contact-us", "followers": null, "contacted": false, "adminName": "Bassam Badran", "phone": "", "email": "recteur@ul.edu.lb", "area": "Building of the Central Administration of the Lebanese University, Museum, Beirut", "status": "", "notes": "This independent body represents the part-time and hourly contract professors. Fighting for fair compensation, comprehensive health benefits, and transition to full-time tenure."}, {"sourceType": "Syndicates", "name": "Association of Contracted Teachers in Public Primary Education in Lebanon رابطة الأساتذة المتعاقدين في التعليم الأساسي الرسمي في لبنان", "link": "https://www.facebook.com/ctlpteacher/?locale=ar_AR", "followers": null, "contacted": true, "adminName": "Nisreen Chahine", "phone": "03 818 017", "email": "chahinenisrine7@gmail.com", "area": "Beirut, Lebanon", "status": "Send Additional Information", "notes": "Organization that supports contracted teachers in Lebanon’s public basic education sector and advocates for their professional rights and job stability."}, {"sourceType": "Syndicates", "name": "Committee of Contracted Secondary Teachers in Public Education in Lebanon لجنة الأساتذة المتعاقدين في التعليم الثانوي الرسمي في لبنان", "link": "https://www.facebook.com/groups/220912311445407/about", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "Lebanon", "status": "", "notes": "A group that represents contracted secondary school teachers in Lebanon’s public education system and advocates for their rights and working conditions."}, {"sourceType": "Freelancer Platforms", "name": "Preply", "link": "preply.com", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Messaging through the website"}, {"sourceType": "Freelancer Platforms", "name": "Italki", "link": "https://www.italki.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Messaging through the website"}, {"sourceType": "Freelancer Platforms", "name": "AmazingTalker", "link": "https://en.amazingtalker.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Messaging through the website"}, {"sourceType": "Freelancer Platforms", "name": "Tutoroo", "link": "https://www.tutoroo.co/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Messaging through the website, Lebanese tutors living abroad"}, {"sourceType": "Freelancer Platforms", "name": "Classgap", "link": "https://www.classgap.com/en", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Messaging through the website"}, {"sourceType": "Freelancer Platforms", "name": "Superprof", "link": "https://www.superprof.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Non-Lebanese Tutors"}, {"sourceType": "Freelancer Platforms", "name": "Cambly (Arabic)", "link": "https://www.cambly.com/en/subscribe?lang=ar", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Non-Lebanese Tutors"}, {"sourceType": "Freelancer Platforms", "name": "Beelancers", "link": "https://beelancers.com/categories/HOME", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "-"}, {"sourceType": "Freelancer Platforms", "name": "Skillscore", "link": "https://skillscoreapp.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "Yes", "notes": "Numbers are availbale to call"}, {"sourceType": "Freelancer Platforms", "name": "Tamayyuz", "link": "https://tamayyoz.site/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Requests the tutor through Tamayyoz's whats app"}, {"sourceType": "Freelancer Platforms", "name": "Delne", "link": "https://www.dellne.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "Yes", "notes": "Can directly call, but most are sotres"}, {"sourceType": "Freelancer Platforms", "name": "Apprentus", "link": "https://www.apprentus.com/en/private-lessons/beirut-lebanon", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Messaging through the website, no phone numbers"}, {"sourceType": "Freelancer Platforms", "name": "Mostaql", "link": "https://mostaql.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Messaging through the website, no phone numbers"}, {"sourceType": "Freelancer Platforms", "name": "EduMatchLB", "link": "https://www.edumatchlb.com/find-teachers", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Not active yet"}, {"sourceType": "Freelancer Platforms", "name": "SPAN", "link": "https://span.it.com/about/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "IOS only App, message and call in app (must be connected/following), no numbers"}, {"sourceType": "Freelancer Platforms", "name": "Yelleb", "link": "Yelleb", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "Yes", "notes": "Numbers available, but mostly stores"}, {"sourceType": "Freelancer Platforms", "name": "Yalatask", "link": "https://www.yallatasks.com/", "followers": null, "contacted": false, "adminName": "", "phone": "", "email": "", "area": "", "status": "No", "notes": "Numbers may be added by the freelancer in their bio, only found 1"}, {"sourceType": "Tutoring Centers", "name": "Jabbour Tutoring", "link": "", "followers": null, "contacted": null, "adminName": "Nadim Abdo", "phone": "71 855 369", "email": "", "area": "Metn, Dbayeh", "status": "", "notes": "Math & general subjects"}, {"sourceType": "Tutoring Centers", "name": "Ms. Mentor Consulting", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 443 889", "email": "", "area": "Metn, Dbayeh", "status": "", "notes": "IB tutoring, English, personal development"}, {"sourceType": "Tutoring Centers", "name": "Schmoopie Learning Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 636 062", "email": "", "area": "Metn, Dik El Mehdi", "status": "", "notes": "After-school support, warm & caring environment"}, {"sourceType": "Tutoring Centers", "name": "Master Maths", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 534 924", "email": "", "area": "Keserwan, Zouk Mosbeh", "status": "", "notes": "Math specialist"}, {"sourceType": "Tutoring Centers", "name": "L'étudiant", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "70 595 930", "email": "", "area": "Keserwan, Zouk Mosbeh", "status": "", "notes": "General academic support, grade improvement"}, {"sourceType": "Tutoring Centers", "name": "Grace Tawile – You Speak Language Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 296 299", "email": "", "area": "Keserwan, Haret El Mir", "status": "", "notes": "Arabic, English, French (18 years experience)"}, {"sourceType": "Tutoring Centers", "name": "Mentalist Tutoring Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 848 994", "email": "", "area": "Keserwan, Jounieh", "status": "", "notes": "General tutoring, long hours (9AM–9PM)"}, {"sourceType": "Tutoring Centers", "name": "ASP – After School Programs by Jeannette Chalouhy", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 012 764", "email": "", "area": "Keserwan, Ghazir", "status": "", "notes": "After-school, structured & professional"}, {"sourceType": "Tutoring Centers", "name": "UpGrow Learning Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "78 804 787", "email": "", "area": "Keserwan, Tabarja", "status": "", "notes": "Children with learning challenges, creative methods"}, {"sourceType": "Tutoring Centers", "name": "Cranium STEAM Education Platform", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "—", "email": "", "area": "Keserwan, Jeita", "status": "", "notes": "Robotics, coding & STEAM for kids"}, {"sourceType": "Tutoring Centers", "name": "Centercti – Choueifat", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 030 944", "email": "", "area": "Baabda, Choueifat", "status": "", "notes": "After-school tutoring & summer camps"}, {"sourceType": "Tutoring Centers", "name": "Simple-A Tutoring", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 465 600", "email": "", "area": "Beirut, Ras Beirut", "status": "", "notes": "University & school subjects, community feel"}, {"sourceType": "Tutoring Centers", "name": "Walk with me – Aya's Tutoring Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 671 440", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Arabic, writing & analysis skills"}, {"sourceType": "Tutoring Centers", "name": "Ostaz", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 017 830", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Tutor-matching platform (online & in-person)"}, {"sourceType": "Tutoring Centers", "name": "Elite Tutors", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "78 814 314", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "All subjects, school & university level"}, {"sourceType": "Tutoring Centers", "name": "Beirut Tutors", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 404 662", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "University subjects, fast response"}, {"sourceType": "Tutoring Centers", "name": "EUNOIA TUTORING", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 973 990", "email": "", "area": "Beirut, Ashrafieh", "status": "", "notes": "General tutoring, long hours"}, {"sourceType": "Tutoring Centers", "name": "Etudes et Appui Scolaire", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "70 474 505", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Academic support, very long hours (10AM–10PM)"}, {"sourceType": "Tutoring Centers", "name": "Bassam Learning Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 608 336", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "English language specialist"}, {"sourceType": "Tutoring Centers", "name": "Smart Learning Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 917 909", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "General tutoring"}, {"sourceType": "Tutoring Centers", "name": "Aslc After School Learning Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "01 243 105", "email": "", "area": "Metn, Bourj Hammoud", "status": "", "notes": "General tutoring"}, {"sourceType": "Tutoring Centers", "name": "Beirut Learning Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "78 958 001", "email": "", "area": "Metn, Jdeideh", "status": "", "notes": "After-school program"}, {"sourceType": "Tutoring Centers", "name": "Centre Espace Scolaire", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 936 030", "email": "", "area": "Metn, Bsalim", "status": "", "notes": "Language school, excellent teaching strategies"}, {"sourceType": "Tutoring Centers", "name": "CLS - Après École", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 058 966", "email": "", "area": "Metn, Zalqa", "status": "", "notes": "General tutoring"}, {"sourceType": "Tutoring Centers", "name": "Rectangle Tutoring Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 060 621", "email": "", "area": "Metn, Jal El Dib", "status": "", "notes": "After-school tutoring"}, {"sourceType": "Tutoring Centers", "name": "MAT", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "70 992 182", "email": "", "area": "Metn, Mansourieh", "status": "", "notes": "General tutoring"}, {"sourceType": "Tutoring Centers", "name": "Portefeuille d'Études", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 776 615", "email": "", "area": "Metn, Jal El Dib", "status": "", "notes": "Private tutoring, highly recommended"}, {"sourceType": "Tutoring Centers", "name": "Santa Maria Centre d'étude", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 424 413", "email": "", "area": "Metn, Rabieh", "status": "", "notes": "Languages incl. Spanish, education center"}, {"sourceType": "Tutoring Centers", "name": "SetOut Lebanon", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 742 912", "email": "", "area": "Metn, Fanar", "status": "", "notes": "French & Lebanese Baccalaureate specialist"}, {"sourceType": "Tutoring Centers", "name": "SKILD Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 236 308", "email": "", "area": "Metn, Antelias", "status": "", "notes": "On-site & online tutoring"}, {"sourceType": "Tutoring Centers", "name": "TutorsHub - Private Tutoring in Lebanon", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "4 533 7910", "email": "", "area": "Metn, Mansourieh", "status": "", "notes": "Learning center, 15+ years in business"}, {"sourceType": "Tutoring Centers", "name": "BrainHacks Education", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "78 952 454", "email": "", "area": "—, Online", "status": "", "notes": "Online & in-person, all subjects"}, {"sourceType": "Tutoring Centers", "name": "The Study Dose", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 964 254", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "General tutoring, 7+ years in business"}, {"sourceType": "Tutoring Centers", "name": "Rubix Education", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 175 163", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "General tutoring"}, {"sourceType": "Tutoring Centers", "name": "RANIA.", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 668 811", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "General tutoring, 7+ years in business"}, {"sourceType": "Tutoring Centers", "name": "Tutoring & More", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 282 858", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Private tutoring"}, {"sourceType": "Tutoring Centers", "name": "SEE Education", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "3 446 4450", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "General tutoring, 5+ years in business"}, {"sourceType": "Tutoring Centers", "name": "Readiness Tutors", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "79 303 059", "email": "", "area": "Baabda, Wata Aamaret Chalhoub", "status": "", "notes": "Study center"}, {"sourceType": "Tutoring Centers", "name": "Etcetera - Educational Teaching Consultancy", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 579 262", "email": "", "area": "Baabda, Hazmieh", "status": "", "notes": "Tutoring service, 15+ years, follow-up & support"}, {"sourceType": "Tutoring Centers", "name": "Eureka Brain Booster Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "70 776 148", "email": "", "area": "Metn, Rabieh", "status": "", "notes": "Learning center, 7+ years in business"}, {"sourceType": "Tutoring Centers", "name": "Quel-Prof !?", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "3 437 9710", "email": "", "area": "Metn, Baouchriyeh", "status": "", "notes": "Professional tutoring service, 7+ years"}, {"sourceType": "Tutoring Centers", "name": "Limitless Academy", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 173 774", "email": "", "area": "Baabda, Jamhour", "status": "", "notes": "Private tutor, sympathetic & supportive"}, {"sourceType": "Tutoring Centers", "name": "2ème école Tutoring Center - Horch Tabet", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 927 493", "email": "", "area": "Beirut, Horch Tabet", "status": "", "notes": "After-school, highest quality education, 15+ years"}, {"sourceType": "Tutoring Centers", "name": "Infinity Tutoring Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 542 895", "email": "", "area": "Aley, Aley", "status": "", "notes": "General tutoring, 5+ years in business"}, {"sourceType": "Tutoring Centers", "name": "David's Academy", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "70 451 993", "email": "", "area": "Metn, Mansourieh", "status": "", "notes": "Education center"}, {"sourceType": "Tutoring Centers", "name": "The New Age Teachers Office", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 233 155", "email": "", "area": "Metn, Mansourieh", "status": "", "notes": "Tutoring services, 3+ years in business"}, {"sourceType": "Tutoring Centers", "name": "GreatMind Education LB", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 710 091", "email": "", "area": "Metn, Sin el fil", "status": "", "notes": "School center"}, {"sourceType": "Tutoring Centers", "name": "Succeed&Achieve - SALC", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 986 022", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Education center, 7+ years, informative courses"}, {"sourceType": "Tutoring Centers", "name": "ETC - Expertise Training Center Lebanon", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "3 331 741", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Learning center, 20+ years, structured courses"}, {"sourceType": "Tutoring Centers", "name": "ESF Jdeideh", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 656 036", "email": "", "area": "Metn, Jdeideh", "status": "", "notes": "Education center"}, {"sourceType": "Tutoring Centers", "name": "Mindset Learning Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 949 949", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Education center"}, {"sourceType": "Tutoring Centers", "name": "EDU My Way", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "3 716 276", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Private tutor, all subjects, open 24 hours"}, {"sourceType": "Tutoring Centers", "name": "Ola's Education Center - ALEY", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "—", "email": "", "area": "Aley, Aley", "status": "", "notes": "Education center, 10+ years, smart teachers"}, {"sourceType": "Tutoring Centers", "name": "ILearn", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "—", "email": "", "area": "Metn, Jdeideh", "status": "", "notes": "Tutoring service"}, {"sourceType": "Tutoring Centers", "name": "ScoreHub", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "01 616 618", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Learning center, 5+ years in business"}, {"sourceType": "Tutoring Centers", "name": "Centre Educatif Saint-Michel", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "70 588 363", "email": "", "area": "Metn, Bikfaiya", "status": "", "notes": "Flexible schedules, helpful tutors"}, {"sourceType": "Tutoring Centers", "name": "Brain Building Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 738 600", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Education center, 10+ years in business"}, {"sourceType": "Tutoring Centers", "name": "Stepping Stones Learning Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 929 285", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Tutoring, therapy, fine art, mental math, robotics, Muay Thai"}, {"sourceType": "Tutoring Centers", "name": "Tamayaz", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "78 895 913", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Tutoring service, open 24 hours"}, {"sourceType": "Tutoring Centers", "name": "ASAP Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 660 393", "email": "", "area": "Metn, Broummana", "status": "", "notes": "Academic Support Achievement Program"}, {"sourceType": "Tutoring Centers", "name": "I SPY by Wafa El Nawar", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "70 867 047", "email": "", "area": "Metn, Mansourieh", "status": "", "notes": "Education center"}, {"sourceType": "Tutoring Centers", "name": "__Pedago__", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 218 522", "email": "", "area": "Metn, Mtaileb", "status": "", "notes": "Education center, 3+ years, on-site & online"}, {"sourceType": "Tutoring Centers", "name": "American Learning Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "01 386 161", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Education center, 5+ years, online classes"}, {"sourceType": "Tutoring Centers", "name": "Firefly Tutoring", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 590 828", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Education center, 5+ years, open until 11 PM"}, {"sourceType": "Tutoring Centers", "name": "Aim it Tutoring", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 969 424", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "On-site & online tutoring, open until 11 PM"}, {"sourceType": "Tutoring Centers", "name": "LoghaTek for Arabic Language Services", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "90 538 520 54 96", "email": "", "area": "—, Lebanon", "status": "", "notes": "Arabic language specialist, 7+ years"}, {"sourceType": "Tutoring Centers", "name": "LES Tutoring School", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 048 572", "email": "", "area": "Baabda, Choueifat", "status": "", "notes": "Cramming school, high grades focus, professional"}, {"sourceType": "Tutoring Centers", "name": "Studylab", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 525 640", "email": "", "area": "Beirut, Ain El Remmaneh", "status": "", "notes": "Tutoring service"}, {"sourceType": "Tutoring Centers", "name": "ITutor", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 675 765", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Tutoring service, 7+ years in business"}, {"sourceType": "Tutoring Centers", "name": "Geek Express", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "70 844 205", "email": "", "area": "Beirut, Hamra", "status": "", "notes": "Coding for kids & youth, 7+ years in business"}, {"sourceType": "Tutoring Centers", "name": "Adam Miss Hana Tutor", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "—", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Private tutoring"}, {"sourceType": "Tutoring Centers", "name": "Smart Minds Academy", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 373 492", "email": "", "area": "Metn, Dbayeh", "status": "", "notes": "Innovative programs, motivating atmosphere"}, {"sourceType": "Tutoring Centers", "name": "YourPaperMate", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 064 484", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Tutoring service, open 24 hours"}, {"sourceType": "Tutoring Centers", "name": "Xavier Tutoring Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "3 021 6470", "email": "", "area": "Beirut, Beirut", "status": "", "notes": "Tutoring service, 3+ years in business"}, {"sourceType": "Tutoring Centers", "name": "360 Tutoring Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "01 243 105", "email": "", "area": "Beirut, Bourj Hammoud", "status": "", "notes": ""}, {"sourceType": "Tutoring Centers", "name": "Levantine Institute", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 558 063", "email": "", "area": "Beirut, Gouraud", "status": "", "notes": "Arabic language school"}, {"sourceType": "Tutoring Centers", "name": "University Private Tutors (UniPT)", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 939 521", "email": "", "area": "Beirut, Bliss", "status": "", "notes": ""}, {"sourceType": "Tutoring Centers", "name": "WE LEADERS", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 927 493", "email": "", "area": "Beirut", "status": "", "notes": ""}, {"sourceType": "Tutoring Centers", "name": "Kalash Tutoring", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "—", "email": "", "area": "Beirut, Sanayeh", "status": "", "notes": "Education center, 3+ years in business"}, {"sourceType": "Tutoring Centers", "name": "The Learning Lab", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "03 400 960", "email": "", "area": "Beirut", "status": "", "notes": "Learning center"}, {"sourceType": "Tutoring Centers", "name": "Studypedia", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "01 341 908", "email": "", "area": "Beirut", "status": "", "notes": "Educational consultant, study abroad, 10+ years"}, {"sourceType": "Tutoring Centers", "name": "LAU Simulation Models (LAUSM)", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "01 786 456", "email": "", "area": "Beirut", "status": "", "notes": "Student-led education center, 20+ years"}, {"sourceType": "Tutoring Centers", "name": "Leaders Technology Center by CIS College", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "01 340 610", "email": "", "area": "Beirut", "status": "", "notes": "Technical school, online classes, 10+ years"}, {"sourceType": "Tutoring Centers", "name": "Amideast", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "01 989 901", "email": "", "area": "Beirut", "status": "", "notes": "Association / Organization, on-site services"}, {"sourceType": "Tutoring Centers", "name": "LE COACH - SUPPORT SCOLAIRE", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "70 770 033", "email": "", "area": "Beirut", "status": "", "notes": "Tutoring service, online classes, 7+ years"}, {"sourceType": "Tutoring Centers", "name": "Learning Experts Center", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "81 836 757", "email": "", "area": "Beirut", "status": "", "notes": "Education center, 3+ years in business"}, {"sourceType": "Tutoring Centers", "name": "Saifi Institute for Arabic Language", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "76 937 033", "email": "", "area": "Beirut", "status": "", "notes": "Arabic language school, 15+ years"}, {"sourceType": "Tutoring Centers", "name": "01tutor – Your success is ours", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "78 850 503", "email": "", "area": "Beirut", "status": "", "notes": "On-site & online tutoring, 3+ years"}, {"sourceType": "Tutoring Centers", "name": "EDUCA by Etude Najem", "link": "", "followers": null, "contacted": null, "adminName": "", "phone": "71 916 782", "email": "", "area": "Baabda, Hazmieh", "status": "", "notes": ""}];
+
+  const TUTORS_SOURCE_TYPES = ["Facebook Groups", "Academies & Institutions", "Syndicates", "Freelancer Platforms", "Tutoring Centers"];
+
+  const escapeHtml = SourcesData.escapeHtml;
+
+  function fmtNum(n) {
+    return n == null ? "—" : n.toLocaleString();
+  }
+
+  /* ---------------- header row 1 (cross-source-type) ---------------- */
+
+  function computeHeaderKpis(entities) {
+    const total = entities.length;
+    const contacted = entities.filter((e) => e.contacted === true).length;
+    const totalFollowers = entities.reduce((s, e) => s + (e.followers || 0), 0);
+    const byType = {};
+    TUTORS_SOURCE_TYPES.forEach((t) => (byType[t] = 0));
+    entities.forEach((e) => (byType[e.sourceType] = (byType[e.sourceType] || 0) + 1));
+    const topType = TUTORS_SOURCE_TYPES.slice().sort((a, b) => byType[b] - byType[a])[0];
+    return { total, contacted, totalFollowers, byType, topType, topTypeCount: byType[topType] };
+  }
+
+  /* ---------------- header row 2 (drill into the top source type) ---------------- */
+
+  function computeDrilldown(entities, topType) {
+    const list = entities.filter((e) => e.sourceType === topType);
+    const hasFollowers = list.some((e) => e.followers != null && e.followers > 0);
+    const notContacted = list.filter((e) => e.contacted !== true).length;
+
+    if (hasFollowers) {
+      const sorted = list.slice().sort((a, b) => (b.followers || 0) - (a.followers || 0));
+      return { mode: "followers", featured: sorted[0], total: list.length, notContacted };
+    }
+
+    // No follower/audience-size metric exists for this source type (true
+    // for every type here except Facebook Groups) — the next best "which
+    // one is most worth calling first" signal is contact-info completeness
+    // (a named contact AND a phone number beats a phone-only row).
+    const scored = list
+      .map((e) => ({ e, score: (e.adminName ? 1 : 0) + (e.phone ? 1 : 0) + (e.email ? 1 : 0) }))
+      .sort((a, b) => b.score - a.score || a.e.name.localeCompare(b.e.name));
+    const fullyDocumented = list.filter((e) => e.adminName && e.phone).length;
+    return { mode: "completeness", featured: scored[0].e, total: list.length, notContacted, fullyDocumented };
+  }
+
+  function renderHeaderKpis() {
+    const kpis = computeHeaderKpis(TUTORS_ENTITIES);
+    const contactedPct = kpis.total ? Math.round((kpis.contacted / kpis.total) * 100) : 0;
+    const topShare = kpis.total ? Math.round((kpis.topTypeCount / kpis.total) * 100) : 0;
+
+    const row1 = [
+      { tone: "leads", icon: "list-checks", value: fmtNum(kpis.total), label: "TOTAL TUTOR SOURCES", sub: "every Tutors-tagged Facebook Group, Academy, Syndicate, Freelancer Platform & Tutoring Center combined" },
+      { tone: "teal", icon: "phone-call", value: `${fmtNum(kpis.contacted)} / ${fmtNum(kpis.total)}`, label: "TUTOR SOURCES CONTACTED", sub: `${contactedPct}% of all Tutor sources have a logged "Yes"/"Called" — the rest are blank, not confirmed "no"`, big: true },
+      { tone: "indigo", icon: "globe", value: fmtNum(kpis.totalFollowers), label: "TUTOR SOURCES FOLLOWER COUNT", sub: "combined Facebook followers across Tutors-tagged groups only — the other 4 source types don't track an audience size" },
+      { tone: "calls", icon: "crown", value: kpis.topType, label: "MOST IMPORTANT SOURCE FOR TUTORS", sub: `${fmtNum(kpis.topTypeCount)} of ${fmtNum(kpis.total)} Tutor sources (${topShare}%) come from here — more than any other source type`, big: true },
+    ];
+
+    document.getElementById("tutKpiRow1").innerHTML = row1
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}" title="${escapeHtml(c.label)}: ${escapeHtml(c.sub)}">
+        <div class="ov-kpi-top"><div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div></div>
+        <div class="ov-kpi-value${c.big ? " kpi-value-text" : ""}">${escapeHtml(c.value)}</div>
+        <div class="ov-kpi-label">${escapeHtml(c.label)} &middot; ${escapeHtml(c.sub)}</div>
+      </div>`
+      )
+      .join("");
+
+    const drill = computeDrilldown(TUTORS_ENTITIES, kpis.topType);
+    document.getElementById("tutRow2Title").textContent = `Inside ${kpis.topType} — the top source type for Tutors`;
+    document.getElementById("tutRow2Hint").textContent =
+      drill.mode === "followers"
+        ? "The single biggest group here, and how much of this source type is still untouched"
+        : `${kpis.topType} doesn't track an audience size, so "most relevant" here means most ready to call — a named contact plus a phone number`;
+
+    let cardA, cardB;
+    if (drill.mode === "followers") {
+      cardA = { tone: "applied", icon: "star", value: drill.featured.name, label: `MOST-FOLLOWED ${kpis.topType.toUpperCase().replace(/S$/, "")}`, sub: "the single largest audience inside this source type", big: true };
+      cardB = { tone: "leads", icon: "globe", value: fmtNum(drill.featured.followers), label: "ITS FOLLOWER COUNT", sub: `how many people one post in "${drill.featured.name}" could reach` };
+    } else {
+      cardA = { tone: "applied", icon: "star", value: drill.featured.name, label: `MOST CONTACT-READY ${kpis.topType.toUpperCase().replace(/S$/, "")}`, sub: "has both a named contact and a phone number on file — the easiest one to call first", big: true };
+      cardB = { tone: "leads", icon: "users", value: `${fmtNum(drill.fullyDocumented)} / ${fmtNum(drill.total)}`, label: "FULLY DOCUMENTED", sub: `have both a named contact and a phone number — the rest only have a phone, if that` };
+    }
+    const cardC = { tone: "red", icon: "target", value: `${fmtNum(drill.notContacted)} / ${fmtNum(drill.total)}`, label: `NOT YET CONTACTED IN ${kpis.topType.toUpperCase()}`, sub: "the untouched opportunity inside your single biggest Tutor source type" };
+
+    document.getElementById("tutKpiRow2").innerHTML = [cardA, cardB, cardC]
+      .map(
+        (c) => `
+      <div class="ov-kpi-card tone-${c.tone}" title="${escapeHtml(c.label)}: ${escapeHtml(c.sub)}">
+        <div class="ov-kpi-top"><div class="ov-kpi-icon">${Icons.svg(c.icon, { size: 18 })}</div></div>
+        <div class="ov-kpi-value${c.big ? " kpi-value-text" : ""}">${escapeHtml(c.value)}</div>
+        <div class="ov-kpi-label">${escapeHtml(c.label)} &middot; ${escapeHtml(c.sub)}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- outreach progress rings ---------------- */
+
+  function ringSvg(percent, tone) {
+    const r = 30;
+    const c = 2 * Math.PI * r;
+    const clamped = Math.max(0, Math.min(100, percent));
+    const offset = c - (clamped / 100) * c;
+    return `
+      <svg viewBox="0 0 74 74" class="goal-ring">
+        <circle cx="37" cy="37" r="${r}" class="goal-ring-track" />
+        <circle cx="37" cy="37" r="${r}" class="goal-ring-fill tone-${tone}"
+          stroke-dasharray="${c}" stroke-dashoffset="${offset}" transform="rotate(-90 37 37)" />
+        <text x="37" y="42" text-anchor="middle" class="goal-ring-text">${Math.round(clamped)}%</text>
+      </svg>`;
+  }
+
+  function renderProgressRings() {
+    const kpis = computeHeaderKpis(TUTORS_ENTITIES);
+    const tcList = TUTORS_ENTITIES.filter((e) => e.sourceType === kpis.topType);
+    const tcContactedPct = tcList.length ? (tcList.filter((e) => e.contacted === true).length / tcList.length) * 100 : 0;
+    const overallPct = kpis.total ? (kpis.contacted / kpis.total) * 100 : 0;
+    const hasPhonePct = kpis.total ? (TUTORS_ENTITIES.filter((e) => e.phone).length / kpis.total) * 100 : 0;
+
+    const rings = [
+      { pct: overallPct, tone: "primary", value: `${kpis.contacted}/${kpis.total}`, label: "All Tutor sources contacted" },
+      { pct: tcContactedPct, tone: "purple", value: `${tcList.filter((e) => e.contacted === true).length}/${tcList.length}`, label: `${kpis.topType} contacted` },
+      { pct: hasPhonePct, tone: "teal", value: `${TUTORS_ENTITIES.filter((e) => e.phone).length}/${kpis.total}`, label: "Have a phone number on file" },
+    ];
+
+    document.getElementById("tutProgressRings").innerHTML = rings
+      .map(
+        (r) => `
+      <div class="ov-goal-card" title="${escapeHtml(r.label)}">
+        ${ringSvg(r.pct, r.tone)}
+        <div class="ov-goal-value">${escapeHtml(r.value)}</div>
+        <div class="ov-goal-label">${escapeHtml(r.label)}</div>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- top reach opportunities ---------------- */
+
+  function renderTopOpportunities() {
+    const notContacted = TUTORS_ENTITIES.filter((e) => e.contacted !== true && e.followers)
+      .slice()
+      .sort((a, b) => b.followers - a.followers)
+      .slice(0, 5);
+    const wrap = document.getElementById("tutTopOpportunities");
+    if (!notContacted.length) {
+      wrap.innerHTML = `<p class="ov-empty-hint">Every Facebook Group with a tracked follower count has already been marked contacted.</p>`;
+      return;
+    }
+    wrap.innerHTML = notContacted
+      .map(
+        (e) => `
+      <div class="ov-followup-row urgent">
+        <div class="ov-followup-icon">${Icons.svg("globe", { size: 15 })}</div>
+        <div class="ov-followup-info">
+          <div class="ov-followup-name">${escapeHtml(e.name)}</div>
+          <div class="ov-followup-phone">${fmtNum(e.followers)} followers &middot; ${escapeHtml(e.sourceType)}</div>
+        </div>
+        <span class="ov-followup-days">Not contacted</span>
+      </div>`
+      )
+      .join("");
+  }
+
+  /* ---------------- AI insights (rule-based, from real numbers) ---------------- */
+
+  function renderInsights() {
+    const kpis = computeHeaderKpis(TUTORS_ENTITIES);
+    const drill = computeDrilldown(TUTORS_ENTITIES, kpis.topType);
+    const insights = [];
+
+    insights.push({
+      tone: "red",
+      icon: "target",
+      html: `<strong>${escapeHtml(kpis.topType)}</strong> makes up ${fmtNum(kpis.topTypeCount)} of your ${fmtNum(kpis.total)} Tutor sources, but only ${fmtNum(kpis.topTypeCount - drill.notContacted)} of them have been contacted — that's ${fmtNum(drill.notContacted)} untouched leads in your single biggest pool.`,
+    });
+
+    const topOpp = TUTORS_ENTITIES.filter((e) => e.contacted !== true && e.followers).sort((a, b) => b.followers - a.followers)[0];
+    if (topOpp) {
+      insights.push({
+        tone: "amber",
+        icon: "globe",
+        html: `<strong>${escapeHtml(topOpp.name)}</strong> (${fmtNum(topOpp.followers)} followers) hasn't been logged as contacted yet — reaching this one Facebook Group alone could put you in front of more people than every other Tutor Facebook Group combined.`,
+      });
+    }
+
+    const phoneCoverage = TUTORS_ENTITIES.filter((e) => e.phone).length;
+    insights.push({
+      tone: "green",
+      icon: "phone",
+      html: `${fmtNum(phoneCoverage)} of ${fmtNum(kpis.total)} Tutor sources (${Math.round((phoneCoverage / kpis.total) * 100)}%) already have a phone number on file — mostly from Tutoring Centers, which is why that list is so ready to work through.`,
+    });
+
+    const overallPct = Math.round((kpis.contacted / kpis.total) * 100);
+    insights.push({
+      tone: "amber",
+      icon: "phone-call",
+      html: `Only ${overallPct}% of all Tutor sources have been logged as contacted so far — Freelancer Platforms (${fmtNum(kpis.byType["Freelancer Platforms"])} sources) and Tutoring Centers (${fmtNum(kpis.byType["Tutoring Centers"])} sources) haven't been started on at all yet.`,
+    });
+
+    document.getElementById("tutInsights").innerHTML = insights
+      .slice(0, 4)
+      .map((i) => `<div class="ov-insight-row ov-insight-tone-${i.tone}"><span class="ov-insight-icon">${Icons.svg(i.icon, { size: 15 })}</span><span class="ov-insight-text">${i.html}</span></div>`)
+      .join("");
+  }
+
+  /* ---------------- filters ---------------- */
+
+  const tutState = { filters: { sourceTypes: [], contacted: [] }, sort: "followersDesc" };
+
+  function filteredTutors() {
+    const { sourceTypes, contacted } = tutState.filters;
+    return TUTORS_ENTITIES.filter((e) => {
+      if (sourceTypes.length && !sourceTypes.includes(e.sourceType)) return false;
+      if (contacted.length) {
+        const isContacted = e.contacted === true;
+        if (contacted.includes("yes") && !contacted.includes("no") && !isContacted) return false;
+        if (contacted.includes("no") && !contacted.includes("yes") && isContacted) return false;
+      }
+      return true;
+    });
+  }
+
+  function initFilters() {
+    const sourceTypeMs = MultiSelect.attach(document.getElementById("tutSourceTypeMs"), {
+      getOptions: () => TUTORS_SOURCE_TYPES.map((t) => ({ value: t, label: t })),
+      getSelected: () => tutState.filters.sourceTypes,
+      onApply: (values) => { tutState.filters.sourceTypes = values; renderTableFromFilters(); },
+      placeholder: "All",
+    });
+    const contactedMs = MultiSelect.attach(document.getElementById("tutContactedMs"), {
+      getOptions: () => [
+        { value: "yes", label: "Contacted" },
+        { value: "no", label: "Not contacted" },
+      ],
+      getSelected: () => tutState.filters.contacted,
+      onApply: (values) => { tutState.filters.contacted = values; renderTableFromFilters(); },
+      placeholder: "All",
+    });
+    document.getElementById("tutSortSelect").addEventListener("change", (e) => {
+      tutState.sort = e.target.value;
+      renderTableFromFilters();
+    });
+    document.getElementById("tutClearFiltersBtn").addEventListener("click", () => {
+      tutState.filters = { sourceTypes: [], contacted: [] };
+      tutState.sort = "followersDesc";
+      document.getElementById("tutSortSelect").value = "followersDesc";
+      [sourceTypeMs, contactedMs].forEach((ms) => ms.updateLabel());
+      renderTableFromFilters();
+    });
+  }
+
+  function renderTableFromFilters() {
+    renderTable(filteredTutors());
+  }
+
+  /* ---------------- table — searchable + sortable + paginated ---------------- */
+
+  const tableState = { search: "", page: 1, pageSize: 25, records: [] };
+
+  function sortComparator(a, b) {
+    switch (tutState.sort) {
+      case "nameAsc":
+        return a.name.localeCompare(b.name);
+      case "sourceType":
+        return a.sourceType.localeCompare(b.sourceType) || a.name.localeCompare(b.name);
+      case "contactedFirst":
+        return (b.contacted === true) - (a.contacted === true) || a.name.localeCompare(b.name);
+      case "notContactedFirst":
+        return (a.contacted === true) - (b.contacted === true) || a.name.localeCompare(b.name);
+      case "followersDesc":
+      default:
+        return (b.followers || 0) - (a.followers || 0);
+    }
+  }
+
+  function wireTable() {
+    document.getElementById("tutTableSearch").addEventListener("input", (e) => {
+      tableState.search = e.target.value.trim().toLowerCase();
+      tableState.page = 1;
+      renderTableBody();
+    });
+    document.getElementById("tutTable").querySelector("thead").addEventListener("click", (e) => {
+      const th = e.target.closest("th[data-sort]");
+      if (!th) return;
+      const map = { sourceType: "sourceType", name: "nameAsc", followers: "followersDesc", adminName: "nameAsc", phone: "nameAsc", contacted: "contactedFirst" };
+      tutState.sort = map[th.dataset.sort] || "followersDesc";
+      document.getElementById("tutSortSelect").value = tutState.sort;
+      renderTableBody();
+    });
+  }
+
+  function renderTable(records) {
+    tableState.records = records;
+    tableState.page = 1;
+    renderTableBody();
+  }
+
+  // Several source sheets put a real URL in the "Links" column, but others
+  // put a plain page name or handle instead (e.g. "Teachers of Lebanon |
+  // Facebook", an Arabic page name + "(@handle) • Facebook") — turning
+  // THAT into "https://" + text produces a broken, nonsensical link. Only
+  // treat it as clickable when it actually looks like a bare domain/URL:
+  // no internal whitespace, and a domain-shaped tail.
+  function isLikelyUrl(s) {
+    if (!s) return false;
+    const t = s.trim();
+    if (!t || /\s/.test(t)) return false;
+    return /^https?:\/\//i.test(t) || /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(t);
+  }
+
+  function renderTableBody() {
+    const { search, pageSize } = tableState;
+    let rows = tableState.records;
+
+    if (search) {
+      rows = rows.filter((r) => [r.name, r.adminName, r.phone, r.email, r.sourceType].join(" ").toLowerCase().includes(search));
+    }
+
+    rows = rows.slice().sort(sortComparator);
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    tableState.page = Math.min(tableState.page, totalPages);
+    const start = (tableState.page - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
+
+    document.getElementById("tutTableHint").textContent = `${rows.length.toLocaleString()} Tutor source${rows.length === 1 ? "" : "s"} matching current filters`;
+
+    document.getElementById("tutTableBody").innerHTML = pageRows
+      .map((r) => {
+        const contactedPill = r.contacted === true
+          ? `<span class="leads-table-status-pill applied">Contacted</span>`
+          : `<span class="leads-table-status-pill notApplied">Not contacted</span>`;
+        const noteBits = [];
+        if (isLikelyUrl(r.link)) {
+          const href = /^https?:\/\//i.test(r.link.trim()) ? r.link.trim() : "https://" + r.link.trim();
+          noteBits.push(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener" title="Open link">${Icons.svg("arrow-up-right", { size: 13 })}</a>`);
+        }
+        const noteText = r.status || r.notes || "";
+        return `
+        <tr>
+          <td title="${escapeHtml(SourcesData.SOURCE_TYPE_EXPLAINERS[r.sourceType] || "")}">${escapeHtml(r.sourceType)}</td>
+          <td>${escapeHtml(r.name)}</td>
+          <td>${r.followers ? fmtNum(r.followers) : "—"}</td>
+          <td>${escapeHtml(r.adminName) || "—"}</td>
+          <td>${escapeHtml(r.phone) || "—"}</td>
+          <td>${contactedPill}</td>
+          <td class="tut-notes-cell" title="${escapeHtml(noteText)}">${noteBits.join(" ")} ${noteText ? escapeHtml(noteText.length > 40 ? noteText.slice(0, 40) + "…" : noteText) : (noteBits.length ? "" : "—")}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const pag = document.getElementById("tutTablePagination");
+    if (totalPages <= 1) {
+      pag.innerHTML = "";
+    } else {
+      pag.innerHTML = `
+        <button type="button" id="tutTablePrev" ${tableState.page <= 1 ? "disabled" : ""}>Prev</button>
+        <span>Page ${tableState.page} of ${totalPages}</span>
+        <button type="button" id="tutTableNext" ${tableState.page >= totalPages ? "disabled" : ""}>Next</button>`;
+      document.getElementById("tutTablePrev")?.addEventListener("click", () => { tableState.page--; renderTableBody(); });
+      document.getElementById("tutTableNext")?.addEventListener("click", () => { tableState.page++; renderTableBody(); });
+    }
+  }
+
+  /* ---------------- bootstrap ---------------- */
+
+  Theme.init();
+  if (Auth.requireLogin("..")) {
+    AppShell.init({ current: "sources-tutors", root: ".." });
+    document.getElementById("tutSrcNoticeIcon").innerHTML = Icons.svg("gauge", { size: 16 });
+    document.getElementById("tutSearchIcon").innerHTML = Icons.svg("search", { size: 15 });
+    renderHeaderKpis();
+    renderProgressRings();
+    renderTopOpportunities();
+    renderInsights();
+    initFilters();
+    wireTable();
+    renderTableFromFilters();
+  }
+</script>
+
+</body>
+</html>

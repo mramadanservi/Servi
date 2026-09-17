@@ -48,7 +48,7 @@ const AuthConfig = {
   ALLOWED_EMAILS: [
     "mramadan@servilb.com",
     "mdaoud@servilb.com",
-     "khalil@servilb.com",
+    "khalil@servilb.com",
     // "teammate@servilb.com",
   ],
 };
